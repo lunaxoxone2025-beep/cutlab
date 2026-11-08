@@ -40,7 +40,10 @@ List<TitleSpan> titleSpans(Project p) {
         for (final c in t.clips)
           if ((c.data['text'] as String? ?? '').trim().isNotEmpty && c.durationTicks > 0) c,
   ];
-  final edges = <int>{for (final c in clips) ...[c.startTicks, c.endTicks]}.toList()..sort();
+  final edges = <int>{
+    for (final c in clips) ...[c.startTicks, c.endTicks]
+  }.toList()
+    ..sort();
   final spans = <TitleSpan>[];
   for (var i = 0; i + 1 < edges.length; i++) {
     final a = edges[i], b = edges[i + 1];

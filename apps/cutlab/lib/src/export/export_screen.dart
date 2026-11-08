@@ -172,18 +172,22 @@ class _Setup extends StatelessWidget {
             title: 'Advanced',
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (s.codec.containers.length > 1)
-                _Row('File format', SegmentedButton<ExportContainer>(
-                  key: const Key('exportContainer'),
-                  segments: [for (final k in s.codec.containers) ButtonSegment(value: k, label: Text(k.label))],
-                  selected: {s.container},
-                  onSelectionChanged: (v) => c.update(s.copyWith(container: v.first)),
-                )),
-              _Row('Encoder effort', SegmentedButton<ExportSpeed>(
-                key: const Key('exportSpeed'),
-                segments: [for (final v in ExportSpeed.values) ButtonSegment(value: v, label: Text(v.label))],
-                selected: {s.speed},
-                onSelectionChanged: (v) => c.update(s.copyWith(speed: v.first)),
-              )),
+                _Row(
+                    'File format',
+                    SegmentedButton<ExportContainer>(
+                      key: const Key('exportContainer'),
+                      segments: [for (final k in s.codec.containers) ButtonSegment(value: k, label: Text(k.label))],
+                      selected: {s.container},
+                      onSelectionChanged: (v) => c.update(s.copyWith(container: v.first)),
+                    )),
+              _Row(
+                  'Encoder effort',
+                  SegmentedButton<ExportSpeed>(
+                    key: const Key('exportSpeed'),
+                    segments: [for (final v in ExportSpeed.values) ButtonSegment(value: v, label: Text(v.label))],
+                    selected: {s.speed},
+                    onSelectionChanged: (v) => c.update(s.copyWith(speed: v.first)),
+                  )),
               SwitchListTile(
                 key: const Key('exportHardware'),
                 contentPadding: EdgeInsets.zero,
@@ -192,24 +196,38 @@ class _Setup extends StatelessWidget {
                 value: s.hardware,
                 onChanged: (v) => c.update(s.copyWith(hardware: v)),
               ),
-              _Row('Audio', DropdownButton<int>(
-                key: const Key('exportAudioBitrate'),
-                value: s.audioKbps,
-                items: [for (final k in const [128, 192, 256, 320]) DropdownMenuItem(value: k, child: Text('$k kbit/s'))],
-                onChanged: (v) => c.update(s.copyWith(audioKbps: v)),
-              )),
-              _Row('Keyframe every', DropdownButton<double>(
-                key: const Key('exportKeyframes'),
-                value: s.keyframeSeconds,
-                items: [for (final k in const [0.5, 1.0, 2.0, 5.0]) DropdownMenuItem(value: k, child: Text('${k == k.roundToDouble() ? k.round() : k} s'))],
-                onChanged: (v) => c.update(s.copyWith(keyframeSeconds: v)),
-              )),
-              _Row('Encoder threads', DropdownButton<int>(
-                key: const Key('exportThreads'),
-                value: s.threads,
-                items: [for (final t in const [0, 2, 4, 8]) DropdownMenuItem(value: t, child: Text(t == 0 ? 'Automatic' : '$t (cooler, slower)'))],
-                onChanged: (v) => c.update(s.copyWith(threads: v)),
-              )),
+              _Row(
+                  'Audio',
+                  DropdownButton<int>(
+                    key: const Key('exportAudioBitrate'),
+                    value: s.audioKbps,
+                    items: [
+                      for (final k in const [128, 192, 256, 320]) DropdownMenuItem(value: k, child: Text('$k kbit/s'))
+                    ],
+                    onChanged: (v) => c.update(s.copyWith(audioKbps: v)),
+                  )),
+              _Row(
+                  'Keyframe every',
+                  DropdownButton<double>(
+                    key: const Key('exportKeyframes'),
+                    value: s.keyframeSeconds,
+                    items: [
+                      for (final k in const [0.5, 1.0, 2.0, 5.0])
+                        DropdownMenuItem(value: k, child: Text('${k == k.roundToDouble() ? k.round() : k} s'))
+                    ],
+                    onChanged: (v) => c.update(s.copyWith(keyframeSeconds: v)),
+                  )),
+              _Row(
+                  'Encoder threads',
+                  DropdownButton<int>(
+                    key: const Key('exportThreads'),
+                    value: s.threads,
+                    items: [
+                      for (final t in const [0, 2, 4, 8])
+                        DropdownMenuItem(value: t, child: Text(t == 0 ? 'Automatic' : '$t (cooler, slower)'))
+                    ],
+                    onChanged: (v) => c.update(s.copyWith(threads: v)),
+                  )),
             ]),
           ),
         Card(
@@ -310,7 +328,8 @@ class _Progress extends StatelessWidget {
       children: [
         Text(phase, key: const Key('exportPhase'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: CutlabSpacing.md),
-        LinearProgressIndicator(key: const Key('exportProgress'), value: c.phase == ExportPhase.rendering ? st.progress : null, minHeight: 8),
+        LinearProgressIndicator(
+            key: const Key('exportProgress'), value: c.phase == ExportPhase.rendering ? st.progress : null, minHeight: 8),
         const SizedBox(height: CutlabSpacing.sm),
         Text('${pct.toStringAsFixed(1)} %  ·  frame ${st.framesDone} of ${st.framesTotal}', key: const Key('exportPercent')),
         const SizedBox(height: CutlabSpacing.md),
@@ -333,8 +352,7 @@ class _Progress extends StatelessWidget {
               style: const TextStyle(color: CutlabColors.imageTrack),
             ),
           ),
-        if (c.missingMedia.isNotEmpty)
-          _Warning('Missing media (exported as black and silence): ${c.missingMedia.join(', ')}'),
+        if (c.missingMedia.isNotEmpty) _Warning('Missing media (exported as black and silence): ${c.missingMedia.join(', ')}'),
         for (final w in st.warnings) _Warning(w),
         const SizedBox(height: CutlabSpacing.lg),
         const Text('You can switch to other apps: the export keeps going (on Android a notification shows the progress).',
@@ -391,14 +409,18 @@ class _Done extends StatelessWidget {
         const SizedBox(height: CutlabSpacing.md),
         _Stat('Saved to', r.location, key: const Key('exportLocation')),
         if (v != null) ...[
-          _Stat('Picture', '${v.videoCodec?.toUpperCase()} ${v.width} × ${v.height} · '
-              '${v.frameRate == null ? '?' : (v.frameRate!.num / v.frameRate!.den).toStringAsFixed(v.frameRate!.den == 1 ? 0 : 2)} fps',
+          _Stat(
+              'Picture',
+              '${v.videoCodec?.toUpperCase()} ${v.width} × ${v.height} · '
+                  '${v.frameRate == null ? '?' : (v.frameRate!.num / v.frameRate!.den).toStringAsFixed(v.frameRate!.den == 1 ? 0 : 2)} fps',
               key: const Key('exportVerified')),
-          _Stat('Sound', v.audioCodec == null ? 'none' : '${v.audioCodec!.toUpperCase()} ${(v.sampleRate ?? 0) ~/ 1000} kHz, ${v.channels} ch'),
+          _Stat('Sound',
+              v.audioCodec == null ? 'none' : '${v.audioCodec!.toUpperCase()} ${(v.sampleRate ?? 0) ~/ 1000} kHz, ${v.channels} ch'),
           _Stat('Length', formatDuration(ticksToDuration(v.durationTicks))),
           if (v.sizeBytes != null) _Stat('Size', formatBytes(v.sizeBytes!)),
         ],
-        _Stat('Took', '${formatDuration(Duration(milliseconds: st.elapsedMs))} with ${st.encoder} (${st.hardware ? 'hardware' : 'software'})'),
+        _Stat('Took',
+            '${formatDuration(Duration(milliseconds: st.elapsedMs))} with ${st.encoder} (${st.hardware ? 'hardware' : 'software'})'),
         for (final p in c.verifyProblems) _Warning(p),
         for (final w in st.warnings) _Warning(w),
         const SizedBox(height: CutlabSpacing.lg),
@@ -440,7 +462,8 @@ class _Failed extends StatelessWidget {
         SelectableText(c.error ?? 'Unknown error', key: const Key('exportError')),
         for (final w in c.status.warnings) _Warning(w),
         const SizedBox(height: CutlabSpacing.sm),
-        const Text('Nothing was left behind: the unfinished file was deleted.', style: TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
+        const Text('Nothing was left behind: the unfinished file was deleted.',
+            style: TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
         const SizedBox(height: CutlabSpacing.lg),
         if (usedHardware)
           FilledButton(

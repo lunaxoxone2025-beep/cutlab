@@ -68,8 +68,8 @@ void main() {
       expect(s.frameRate, Rational.fps60);
       expect(s.codec, ExportCodec.h264);
       expect(s.container, ExportContainer.mp4);
-      expect(VideoExportSettings.forProject(project(settings: const ProjectSettings(frameRate: Rational.fps29_97))).frameRate,
-          Rational.fps30);
+      expect(
+          VideoExportSettings.forProject(project(settings: const ProjectSettings(frameRate: Rational.fps29_97))).frameRate, Rational.fps30);
       expect(VideoExportSettings.forProject(project(settings: const ProjectSettings(width: 3840, height: 2160))).resolution, 2160);
     });
 
@@ -111,8 +111,20 @@ void main() {
     test('engine settings text', () {
       const s = VideoExportSettings(resolution: 720, frameRate: Rational.fps29_97, codec: ExportCodec.hevc, hardware: false, threads: 2);
       final t = s.engineText(path: '/out/a b.mp4', width: 1280, height: 720).split('\n');
-      expect(t, containsAll(['path /out/a b.mp4', 'container mp4', 'video hevc', 'size 1280x720', 'fps 30000/1001', 'quality 75',
-          'hardware 0', 'audio aac', 'audio_bitrate 192', 'threads 2']));
+      expect(
+          t,
+          containsAll([
+            'path /out/a b.mp4',
+            'container mp4',
+            'video hevc',
+            'size 1280x720',
+            'fps 30000/1001',
+            'quality 75',
+            'hardware 0',
+            'audio aac',
+            'audio_bitrate 192',
+            'threads 2'
+          ]));
       expect(t.any((l) => l.startsWith('bitrate')), isFalse);
       expect(s.copyWith(bitrateKbps: 20000).engineText(path: 'x', width: 2, height: 2), contains('bitrate 20000'));
       expect(s.fileName('Ranked', DateTime(2026, 1, 2, 3, 4, 5)), 'Ranked 20260102-030405.mp4');
@@ -132,8 +144,12 @@ void main() {
             ])
           else
             t,
-        const Track(id: 't2', kind: TrackKind.text, clips: [pf.Clip(id: 'c', startTicks: 2 * tps, durationTicks: 4 * tps, data: {'text': 'Clutch'})]),
-        const Track(id: 't3', kind: TrackKind.text, hidden: true, clips: [pf.Clip(id: 'd', startTicks: 0, durationTicks: 9 * tps, data: {'text': 'x'})]),
+        const Track(id: 't2', kind: TrackKind.text, clips: [
+          pf.Clip(id: 'c', startTicks: 2 * tps, durationTicks: 4 * tps, data: {'text': 'Clutch'})
+        ]),
+        const Track(id: 't3', kind: TrackKind.text, hidden: true, clips: [
+          pf.Clip(id: 'd', startTicks: 0, durationTicks: 9 * tps, data: {'text': 'x'})
+        ]),
       ]);
       final spans = titleSpans(q);
       expect([for (final s in spans) (s.start ~/ tps, s.end ~/ tps, s.text)], [(0, 2, 'GG'), (2, 4, 'GG\nClutch'), (4, 6, 'Clutch')]);
@@ -142,7 +158,8 @@ void main() {
     testWidgets('titles are drawn into RGBA files placed like the monitor shows them', (tester) async {
       final dir = Directory.systemTemp.createTempSync('cutlab_titles');
       addTearDown(() => dir.deleteSync(recursive: true));
-      final lines = await tester.runAsync(() => renderTitleOverlays(const [TitleSpan(0, tps, 'GG'), TitleSpan(tps, 2 * tps, 'GG')], 1280, 720, dir));
+      final lines =
+          await tester.runAsync(() => renderTitleOverlays(const [TitleSpan(0, tps, 'GG'), TitleSpan(tps, 2 * tps, 'GG')], 1280, 720, dir));
       expect(lines, hasLength(2));
       final f = lines![0].split(' ');
       expect(f[0], 'overlay');

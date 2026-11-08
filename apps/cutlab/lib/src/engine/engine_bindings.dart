@@ -77,15 +77,14 @@ class EngineBindings {
             int Function(Pointer<Void>, int, int, Pointer<Float>, Pointer<Float>, int)>('cutlab_timeline_render_audio'),
         exportStart = lib.lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Pointer<Void>>),
             int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Pointer<Void>>)>('cutlab_export_start'),
-        exportPause =
-            lib.lookupFunction<Void Function(Pointer<Void>, Int32), void Function(Pointer<Void>, int)>('cutlab_export_pause'),
+        exportPause = lib.lookupFunction<Void Function(Pointer<Void>, Int32), void Function(Pointer<Void>, int)>('cutlab_export_pause'),
         exportCancel = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_export_cancel'),
         exportStatus =
             lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
                 'cutlab_export_status'),
         exportClose = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_export_close'),
-        exportEncoders =
-            lib.lookupFunction<Int32 Function(Int32, Pointer<Pointer<Utf8>>), int Function(int, Pointer<Pointer<Utf8>>)>('cutlab_export_encoders');
+        exportEncoders = lib.lookupFunction<Int32 Function(Int32, Pointer<Pointer<Utf8>>), int Function(int, Pointer<Pointer<Utf8>>)>(
+            'cutlab_export_encoders');
 
   final Pointer<Utf8> Function() lastError;
   final void Function(Pointer<Void>) free;

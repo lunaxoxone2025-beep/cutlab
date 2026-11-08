@@ -110,7 +110,10 @@ class ExportController extends ChangeNotifier {
         _encoders = await engine.encoders(probe: true);
       } else if (tested.isEmpty) {
         // The hardware test failed or crashed: software encoders only.
-        _encoders = [for (final e in await engine.encoders()) if (!e.hardware) e];
+        _encoders = [
+          for (final e in await engine.encoders())
+            if (!e.hardware) e
+        ];
       } else {
         _encoders = tested;
       }
@@ -217,9 +220,8 @@ class ExportController extends ChangeNotifier {
     if (now.difference(_lastNotice) >= const Duration(seconds: 1)) {
       _lastNotice = now;
       final left = _status.etaMs >= 0 ? ' · ${formatDuration(Duration(milliseconds: _status.etaMs))} left' : '';
-      unawaited(media
-          .updateBackgroundWork('${(_status.progress * 100).toStringAsFixed(0)}%$left', _status.progress)
-          .catchError((Object _) {}));
+      unawaited(
+          media.updateBackgroundWork('${(_status.progress * 100).toStringAsFixed(0)}%$left', _status.progress).catchError((Object _) {}));
     }
     if (now.difference(_lastCondition) >= conditionInterval) {
       _lastCondition = now;
@@ -325,13 +327,16 @@ class ExportController extends ChangeNotifier {
       if (info.width != w || info.height != h) _verifyProblems.add('size is ${info.width}×${info.height}, expected $w×$h');
       final rate = info.frameRate;
       if (rate == null || (rate.num / rate.den - _settings.fps).abs() > 0.01) {
-        _verifyProblems.add('frame rate is ${rate == null ? 'unknown' : (rate.num / rate.den).toStringAsFixed(2)}, expected ${_settings.fpsLabel}');
+        _verifyProblems
+            .add('frame rate is ${rate == null ? 'unknown' : (rate.num / rate.den).toStringAsFixed(2)}, expected ${_settings.fpsLabel}');
       }
       final frameTicks = ticksPerSecond * _settings.frameRate.den ~/ _settings.frameRate.num;
       if ((info.durationTicks - durationTicks).abs() > frameTicks * 2) {
-        _verifyProblems.add('length is ${formatDuration(ticksToDuration(info.durationTicks))}, expected ${formatDuration(ticksToDuration(durationTicks))}');
+        _verifyProblems.add(
+            'length is ${formatDuration(ticksToDuration(info.durationTicks))}, expected ${formatDuration(ticksToDuration(durationTicks))}');
       }
-      if (info.videoCodec != _settings.codec.name) _verifyProblems.add('video codec is ${info.videoCodec}, expected ${_settings.codec.name}');
+      if (info.videoCodec != _settings.codec.name)
+        _verifyProblems.add('video codec is ${info.videoCodec}, expected ${_settings.codec.name}');
       if (info.audioCodec == null) _verifyProblems.add('no sound track');
     } on Object catch (e) {
       _verifyProblems.add('the file could not be read back: $e');

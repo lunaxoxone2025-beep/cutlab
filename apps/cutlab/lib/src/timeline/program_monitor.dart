@@ -42,31 +42,31 @@ class ProgramMonitor extends StatelessWidget {
                   aspectRatio: s.width / s.height,
                   child: LayoutBuilder(
                     builder: (context, box) => Container(
-                    color: Colors.black,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (image != null) RawImage(key: const Key('monitorPicture'), image: image, fit: BoxFit.contain),
-                        if (!playback.available && p.durationTicks > 0)
-                          _note(playback.unavailable ?? controller.engine.info.reason ?? 'Playback is not available in this build.'),
-                        if (p.durationTicks == 0) _note('Add media to the timeline (＋ on a file in Media)'),
-                        if (titles.isNotEmpty)
-                          // Sized like the exported video's titles (export/titles.dart).
-                          Padding(
-                            padding: EdgeInsets.all(TitleLook.padding(box.maxHeight)),
-                            child: Align(
-                              alignment: const Alignment(0, TitleLook.alignY),
-                              child: Text(
-                                titles.join('\n'),
-                                key: const Key('monitorTitles'),
-                                textAlign: TextAlign.center,
-                                style: TitleLook.style(box.maxHeight),
+                      color: Colors.black,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (image != null) RawImage(key: const Key('monitorPicture'), image: image, fit: BoxFit.contain),
+                          if (!playback.available && p.durationTicks > 0)
+                            _note(playback.unavailable ?? controller.engine.info.reason ?? 'Playback is not available in this build.'),
+                          if (p.durationTicks == 0) _note('Add media to the timeline (＋ on a file in Media)'),
+                          if (titles.isNotEmpty)
+                            // Sized like the exported video's titles (export/titles.dart).
+                            Padding(
+                              padding: EdgeInsets.all(TitleLook.padding(box.maxHeight)),
+                              child: Align(
+                                alignment: const Alignment(0, TitleLook.alignY),
+                                child: Text(
+                                  titles.join('\n'),
+                                  key: const Key('monitorTitles'),
+                                  textAlign: TextAlign.center,
+                                  style: TitleLook.style(box.maxHeight),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   ),
                 ),
               ),
