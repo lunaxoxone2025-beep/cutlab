@@ -148,8 +148,7 @@ class _MediaPanel extends StatelessWidget {
   const _MediaPanel();
 
   @override
-  Widget build(BuildContext context) =>
-      const _Panel(title: 'Media', child: _PlannedNote('Media browser and import — Phase 2.'));
+  Widget build(BuildContext context) => const _Panel(title: 'Media', child: _PlannedNote('Media browser and import — Phase 2.'));
 }
 
 class _PreviewPanel extends StatelessWidget {
@@ -160,8 +159,7 @@ class _PreviewPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Panel(
       title: 'Preview',
-      trailing: Text('${settings.width} × ${settings.height}',
-          style: const TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
+      trailing: Text('${settings.width} × ${settings.height}', style: const TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
       child: Padding(
         padding: const EdgeInsets.all(CutlabSpacing.md),
         child: Center(
@@ -277,7 +275,8 @@ class _TimelinePanel extends StatelessWidget {
                   // Advanced mode surfaces per-track state (read-only until Phase 4).
                   if (advanced) ...[
                     const SizedBox(width: CutlabSpacing.sm),
-                    Icon(t.locked ? Icons.lock : Icons.lock_open, size: 14, color: CutlabColors.textMuted, semanticLabel: t.locked ? 'locked' : 'unlocked'),
+                    Icon(t.locked ? Icons.lock : Icons.lock_open,
+                        size: 14, color: CutlabColors.textMuted, semanticLabel: t.locked ? 'locked' : 'unlocked'),
                     const SizedBox(width: CutlabSpacing.xs),
                     Icon(t.hidden ? Icons.visibility_off : Icons.visibility, size: 14, color: CutlabColors.textMuted),
                     const SizedBox(width: CutlabSpacing.xs),

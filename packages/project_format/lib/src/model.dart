@@ -264,7 +264,9 @@ class Clip {
         'effects': [for (final e in effects) e.toJson()],
         if (transitionIn != null) 'transitionIn': transitionIn!.toJson(),
         if (keyframes.isNotEmpty)
-          'keyframes': {for (final e in keyframes.entries) e.key: [for (final k in e.value) k.toJson()]},
+          'keyframes': {
+            for (final e in keyframes.entries) e.key: [for (final k in e.value) k.toJson()]
+          },
         if (data.isNotEmpty) 'data': data,
       };
 

@@ -99,8 +99,7 @@ void main() {
       return (track['clips'] as List<Object?>)[1] as Map<String, Object?>;
     }
 
-    Matcher failsAt(String path) =>
-        throwsA(isA<ProjectFormatException>().having((e) => e.path, 'path', path));
+    Matcher failsAt(String path) => throwsA(isA<ProjectFormatException>().having((e) => e.path, 'path', path));
 
     test('not JSON', () => expect(() => codec.decode('{nope'), throwsA(isA<ProjectFormatException>())));
 
