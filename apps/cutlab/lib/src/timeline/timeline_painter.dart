@@ -265,5 +265,6 @@ class TimelinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(TimelinePainter old) => old.project != project || old.state != state || old.assets != assets || old.rows != rows;
+  bool shouldRepaint(TimelinePainter oldDelegate) =>
+      oldDelegate.project != project || oldDelegate.state != state || oldDelegate.assets != assets || oldDelegate.rows != rows;
 }
