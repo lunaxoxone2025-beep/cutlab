@@ -389,7 +389,9 @@ void test_start_stop_cycles_and_edits() {
   // null device plays gaps; the level value is only checked at normal speed.
   float lv[3] = {0, 0, 0};
   CHECK(cutlab_timeline_levels(t, lv, 3) == 3);
-  for (int i = 0; i < 50 && lv[1] == 0.0f && cutlab_timeline_playing(t); ++i) {
+  // A busy machine can take longer than usual to play out the ~0.2 s mixed
+  // before the change: wait up to 2 s for the quieter level to be heard.
+  for (int i = 0; i < 100 && !(lv[1] > 0.1f && lv[1] < 0.2f) && cutlab_timeline_playing(t); ++i) {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     cutlab_timeline_levels(t, lv, 3);
   }

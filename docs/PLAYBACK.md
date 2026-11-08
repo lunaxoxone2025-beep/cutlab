@@ -63,6 +63,18 @@
 
 - "Late" is how long after its time a picture reached the screen poll (polling every 4 ms).
 - The same benchmark runs in CI on Linux, on Windows and on the Android emulators; see the job logs ("Timeline benchmark").
+
+GitHub Actions Linux runner (4 CPUs), same benchmark: mix 16 tracks 2.2 % of one CPU; 1080p60 H.264 35 % / 0 dropped; 1080p60 HEVC 56 % / 0 dropped; 4K HEVC 10-bit 95 % / 0 dropped; a cut every second 130 % / 0 dropped; 120 fps source 4 % / 2 dropped; 2-hour file 2 % / 0 dropped.
+
+Android emulators (x86_64, 2 CPUs, software rendering of the whole app, no vendor decoders), integration test in the real app:
+
+| Test | API 28 | API 34 |
+|---|---|---|
+| Renderer: 1080p30 H.264 → 1080p60 HEVC + sound track, 4 s | 4019 ms, 129 shown / 43 dropped, late 9.2 ms, 0 audio gaps, AAudio | 4042 ms, 135 shown / 45 dropped, late 11.2 ms, 0 audio gaps, AAudio |
+| Editor: play 4 s timeline from the monitor, cursor reaches the end | 5.4–5.9 s after tapping Play (incl. 1.5 s before the first check) | 10–11 s after tapping Play |
+| Editor diagnostics at the end | 28 shown / 64 dropped, 4 audio gaps, latency 30 ms | 104 shown / 62 dropped, 0 audio gaps, latency 90 ms, audio vs wall clock −91 ms |
+
+On the emulators the picture drops many frames because the emulator draws the whole editor in software on 2 CPUs; the sound and the clock keep time (renderer test: 4 s of timeline in 4.0 s). Why the editor test on API 34 needs ~10 s to show the end is not yet explained: the engine clock reports no drift there, so it is most likely the slow test frames of the emulator, but this has not been proven.
 - Phones are slower per core; hardware decoding (when it passes its test) takes the video work off the CPU.
 
 ## Plan format (app → engine)
@@ -105,3 +117,4 @@ clip <id> <start> <duration> <in-point> <volume> <fade-in> <fade-out> <audio 0|1
 | 120 fps on 60 Hz screens | Every other frame is skipped on screen; frame stepping and seeking stay at 120 fps. |
 | 4K on phones | Decoded in full and scaled for preview. Without a hardware decoder that passes its test, a phone CPU may drop frames. |
 | Device testing | Measured on CI machines and Android emulators; not yet measured on the owner's phone and PC. |
+| Editor on slow emulators | On the API 34 emulator the editor test needed ~10 s to show the end of a 4 s timeline (see Performance); not investigated further, to be checked on a real phone. |
