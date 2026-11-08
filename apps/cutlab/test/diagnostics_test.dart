@@ -63,7 +63,10 @@ void main() {
   });
 
   test('errors go to the log and into the report', () async {
-    final d = make({'platform': 'test', 'decoders': ['c2.test.avc.decoder video/avc HW']});
+    final d = make({
+      'platform': 'test',
+      'decoders': ['c2.test.avc.decoder video/avc HW']
+    });
     d.log('dart', 'something broke', StackTrace.current);
     final report = await d.report();
     expect(report, contains('something broke'));

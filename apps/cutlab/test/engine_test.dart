@@ -173,10 +173,19 @@ void main() {
     expect(
         hardwareCheckKey(
             const ProbeInfo(
-                container: 'mp4', durationTicks: 0, videoCodec: 'hevc', width: 3840, height: 2160, bitDepth: 10, frameRate: Rational.fps59_94),
+                container: 'mp4',
+                durationTicks: 0,
+                videoCodec: 'hevc',
+                width: 3840,
+                height: 2160,
+                bitDepth: 10,
+                frameRate: Rational.fps59_94),
             m),
         'hevc-10bit-2160p60');
-    expect(hardwareCheckKey(const ProbeInfo(container: 'mp4', durationTicks: 0, videoCodec: 'h264', width: 1080, height: 1920, frameRate: Rational.fps30), m),
+    expect(
+        hardwareCheckKey(
+            const ProbeInfo(container: 'mp4', durationTicks: 0, videoCodec: 'h264', width: 1080, height: 1920, frameRate: Rational.fps30),
+            m),
         'h264-8bit-1080p30');
     expect(hardwareCheckKey(null, m), 'unknown-8bit-720p30');
   });

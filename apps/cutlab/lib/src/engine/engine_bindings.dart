@@ -47,8 +47,8 @@ class EngineBindings {
             lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
                 'cutlab_player_stats'),
         hwSelfTest = lib.lookupFunction<_StatusOutJson, StatusOutJsonDart>('cutlab_hw_self_test'),
-        diagInit = lib.lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>(
-            'cutlab_diag_init'),
+        diagInit = lib
+            .lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>('cutlab_diag_init'),
         diagNote = lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('cutlab_diag_note'),
         diagRecent = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_diag_recent');
 
