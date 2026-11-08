@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.byKey(const Key('importMedia')));
     await tester.pumpAndSettle();
     expect(find.text('match01.mp4'), findsOneWidget);
-    expect(find.text('1:30 · 1920×1080 · 976.6 KB'), findsOneWidget);
+    expect(find.text('1:30 · 1920×1080 · 977 KB'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('undo')));
     await tester.pumpAndSettle();
