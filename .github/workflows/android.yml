@@ -1,0 +1,94 @@
+name: Construir APK de Android
+
+# Cada vez que se sube algo a "main", GitHub construye el APK de CutLab
+# y lo publica en la sección Releases del repositorio.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Preparar proyecto Capacitor
+        run: |
+          mkdir -p build/www
+          cp index.html style.css app.js sw.js manifest.webmanifest icon-*.png build/www/
+          cd build
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @capacitor/core@6.1.2 @capacitor/cli@6.1.2 @capacitor/android@6.1.2 @capacitor/filesystem@6.0.1 @capacitor/share@6.0.2
+          npx cap init CutLab com.lunaxoxone.cutlab --web-dir www
+          npx cap add android
+          npx cap sync android
+
+      - name: Icono, versión y firma
+        run: |
+          cd build/android/app/src/main/res
+          rm -rf mipmap-anydpi-v26
+          for d in mipmap-*; do
+            cp "$GITHUB_WORKSPACE/icon-192.png" "$d/ic_launcher.png"
+            cp "$GITHUB_WORKSPACE/icon-192.png" "$d/ic_launcher_round.png"
+            rm -f "$d/ic_launcher_foreground.png"
+          done
+          cd "$GITHUB_WORKSPACE/build/android/app"
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"$VERSION\"/" build.gradle
+          mkdir -p ~/.android
+          cp "$GITHUB_WORKSPACE/android-signing/cutlab.keystore" ~/.android/debug.keystore
+
+      - name: Construir APK
+        run: |
+          cd build/android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/CutLab.apk"
+
+      - name: Publicar en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: CutLab v${{ env.VERSION }}
+          make_latest: true
+          files: CutLab.apk
+          body: |
+            ## CutLab — editor de vídeo estilo CapCut 🎬
+
+            ### 📲 Instalar en Android
+            1. Descarga **CutLab.apk** (abajo, en *Assets*).
+            2. Ábrelo. Si Android lo pide, permite **instalar apps de origen desconocido** para tu navegador.
+            3. Pulsa **Instalar**.
+
+            Para actualizar, descarga el APK más nuevo e instálalo encima: tus proyectos se conservan.
+
+            ### ✨ Funciones
+            - Línea de tiempo con pistas de vídeo, texto y audio
+            - Recortar, dividir, duplicar y reordenar clips
+            - Velocidad 0.1x–4x y volumen hasta 200 %
+            - 10 filtros, ajustes de color, 8 transiciones y efecto Ken Burns
+            - Textos con plantillas, fuentes y animaciones
+            - Música con fundidos
+            - Formatos 9:16, 16:9, 1:1, 4:5 y 3:4
+            - Exportación 480p / 720p / 1080p (se guarda en Documentos/CutLab)
+
+            🔒 Todo se procesa en tu móvil. Tus vídeos nunca se suben a internet.

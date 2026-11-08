@@ -20,7 +20,14 @@ Todo se procesa **en tu dispositivo**: tus vídeos nunca se suben a internet.
 - **Exportar** en 480p, 720p o 1080p a 24/30/60 fps (MP4 o WebM según el navegador) y compartir directamente
 - Funciona **sin conexión** después de la primera visita
 
-## Instalar desde GitHub (GitHub Pages)
+## 📲 Descargar para Android (APK)
+
+**[⬇️ Descargar CutLab.apk](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk)**
+
+Ábrelo en el móvil y pulsa **Instalar**. Si Android lo pide, permite *instalar apps de origen desconocido* para tu navegador.
+El APK se construye y se publica automáticamente en **Releases** cada vez que se actualiza el código.
+
+## Usarlo como web app (GitHub Pages)
 
 1. Entra en GitHub con tu cuenta y crea un repositorio nuevo llamado **`cutlab`** (público).
 2. Pulsa **Add file → Upload files** y sube **todos** los archivos de esta carpeta (están todos en la raíz, sin subcarpetas). Pulsa **Commit changes**.

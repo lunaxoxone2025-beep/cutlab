@@ -1188,13 +1188,53 @@ function finishExport(mime) {
   expUrl = URL.createObjectURL(blob);
   const d = new Date(), name = `cutlab-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.${ext}`;
   $('#expVideo').src = expUrl; const a = $('#expDownload'); a.href = expUrl; a.download = name;
-  const file = new File([blob], name, { type });
   const share = $('#expShare');
-  share.classList.toggle('hidden', !(navigator.canShare && navigator.canShare({ files: [file] })));
-  share.onclick = () => navigator.share({ files: [file], title: 'Mi vídeo' }).catch(() => {});
+  if (NATIVE) {
+    a.removeAttribute('href'); a.onclick = ev => { ev.preventDefault(); nativeSave(blob, name, false); };
+    share.classList.remove('hidden'); share.onclick = () => nativeSave(blob, name, true);
+  } else {
+    const file = new File([blob], name, { type });
+    share.classList.toggle('hidden', !(navigator.canShare && navigator.canShare({ files: [file] })));
+    share.onclick = () => navigator.share({ files: [file], title: 'Mi vídeo' }).catch(() => {});
+  }
   $('#expRun').classList.add('hidden'); $('#expDone').classList.remove('hidden');
   resizeCanvas(); releaseWake(); $('#btnPlay').innerHTML = ic('play');
 }
+// ---------- app nativa de Android (Capacitor) ----------
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const savedPaths = new WeakMap();
+async function blobToB64Chunks(blob, onChunk) {
+  const CH = 3 * 1024 * 1024; // múltiplo de 3 para que el base64 se pueda concatenar
+  for (let o = 0; o < blob.size; o += CH) {
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob.slice(o, o + CH));
+    });
+    await onChunk(b64, o === 0);
+  }
+}
+async function nativeSave(blob, name, share) {
+  const P = window.Capacitor.Plugins, FS = P.Filesystem;
+  if (!FS) return toast('No se pudo guardar');
+  try {
+    let uri = savedPaths.get(blob);
+    if (!uri) {
+      toast('Guardando…');
+      const write = async dir => {
+        const path = dir === 'DOCUMENTS' ? 'CutLab/' + name : name;
+        await blobToB64Chunks(blob, (data, first) => first
+          ? FS.writeFile({ path, data, directory: dir, recursive: true })
+          : FS.appendFile({ path, data, directory: dir }));
+        return (await FS.getUri({ path, directory: dir })).uri;
+      };
+      try { uri = await write('DOCUMENTS'); toast('Guardado en Documentos/CutLab'); }
+      catch (e) { console.warn(e); uri = await write('CACHE'); if (!share) share = true; }
+      savedPaths.set(blob, uri);
+    } else if (!share) toast('Ya está guardado en Documentos/CutLab');
+    if (share && P.Share) await P.Share.share({ title: 'Mi vídeo', files: [uri], dialogTitle: 'Compartir o guardar vídeo' }).catch(() => {});
+  } catch (e) { console.warn(e); toast('No se pudo guardar el vídeo'); }
+}
+if (NATIVE) document.documentElement.classList.add('native');
+
 function endExportUI() { $('#exportOverlay').classList.add('hidden'); resizeCanvas(); releaseWake(); $('#btnPlay').innerHTML = ic('play'); markDirty(); }
 function releaseWake() { try { wakeLock?.release(); } catch {} wakeLock = null; }
 $('#expCancel').onclick = () => stopExport(false);
