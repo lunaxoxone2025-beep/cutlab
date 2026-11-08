@@ -217,7 +217,10 @@ class EditorController extends ChangeNotifier {
       _available[m.id] = ok;
     }
     _notify();
-    await probeMedia([for (final m in _project.media) if (_available[m.id] == true) m.id]);
+    await probeMedia([
+      for (final m in _project.media)
+        if (_available[m.id] == true) m.id
+    ]);
   }
 
   // ---------------------------------------------------------- media engine

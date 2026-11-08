@@ -54,8 +54,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
 
   MediaEngine get _engine => widget.controller.engine;
 
-  Rational get _fps =>
-      widget.controller.probeInfo(widget.media.id)?.frameRate ?? widget.media.frameRate ?? Rational.fps30;
+  Rational get _fps => widget.controller.probeInfo(widget.media.id)?.frameRate ?? widget.media.frameRate ?? Rational.fps30;
 
   int get _frameTicks => framesToTicks(1, _fps);
 
@@ -68,7 +67,8 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
   @override
   void didUpdateWidget(SourceViewer old) {
     super.didUpdateWidget(old);
-    if (old.media.id != widget.media.id || old.media.uri != widget.media.uri ||
+    if (old.media.id != widget.media.id ||
+        old.media.uri != widget.media.uri ||
         old.settings.previewHeight != widget.settings.previewHeight ||
         old.settings.hardwareDecoding != widget.settings.hardwareDecoding) {
       _close();
@@ -392,7 +392,12 @@ class _WaveformPainter extends CustomPainter {
       canvas.drawLine(Offset(x + 0.5, mid - hi * mid * 0.9), Offset(x + 0.5, mid - lo * mid * 0.9), paint);
     }
     final px = position * size.width;
-    canvas.drawLine(Offset(px, 0), Offset(px, size.height), Paint()..color = Colors.white..strokeWidth = 2);
+    canvas.drawLine(
+        Offset(px, 0),
+        Offset(px, size.height),
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 2);
   }
 
   @override

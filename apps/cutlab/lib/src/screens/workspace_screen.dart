@@ -433,43 +433,44 @@ class _MediaTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           onTap: onSelect,
           child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              width: 64,
-              height: 40,
-              color: CutlabColors.surfaceRaised,
-              child: thumbnail != null && !missing
-                  ? Image.memory(thumbnail!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, __, ___) => Icon(_icon, size: 20))
-                  : Icon(_icon, size: 20, color: CutlabColors.textMuted),
-            ),
-          ),
-          const SizedBox(width: CutlabSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(media.displayName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                Text(
-                  details,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: missing ? CutlabColors.danger : CutlabColors.textMuted),
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 64,
+                  height: 40,
+                  color: CutlabColors.surfaceRaised,
+                  child: thumbnail != null && !missing
+                      ? Image.memory(thumbnail!,
+                          fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, __, ___) => Icon(_icon, size: 20))
+                      : Icon(_icon, size: 20, color: CutlabColors.textMuted),
                 ),
-              ],
-            ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Media actions',
-            onSelected: (v) => v == 'relink' ? onRelink() : onRemove(),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'relink', child: Text('Relink…')),
-              PopupMenuItem(value: 'remove', child: Text('Remove from project')),
+              ),
+              const SizedBox(width: CutlabSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(media.displayName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                    Text(
+                      details,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: missing ? CutlabColors.danger : CutlabColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Media actions',
+                onSelected: (v) => v == 'relink' ? onRelink() : onRemove(),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'relink', child: Text('Relink…')),
+                  PopupMenuItem(value: 'remove', child: Text('Remove from project')),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
         ),
       ),
     );
