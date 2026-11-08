@@ -545,7 +545,11 @@ extension TimelineEdits on Project {
 
   static Map<String, List<Keyframe>> _keyframesBefore(Map<String, List<Keyframe>> k, int t) => {
         for (final e in k.entries)
-          if (e.value.any((kf) => kf.timeTicks < t)) e.key: [for (final kf in e.value) if (kf.timeTicks < t) kf],
+          if (e.value.any((kf) => kf.timeTicks < t))
+            e.key: [
+              for (final kf in e.value)
+                if (kf.timeTicks < t) kf
+            ],
       };
 
   static Map<String, List<Keyframe>> _keyframesFrom(Map<String, List<Keyframe>> k, int t) => {
@@ -553,7 +557,8 @@ extension TimelineEdits on Project {
           if (e.value.any((kf) => kf.timeTicks >= t))
             e.key: [
               for (final kf in e.value)
-                if (kf.timeTicks >= t) Keyframe(timeTicks: kf.timeTicks - t, value: kf.value, interpolation: kf.interpolation, bezier: kf.bezier),
+                if (kf.timeTicks >= t)
+                  Keyframe(timeTicks: kf.timeTicks - t, value: kf.value, interpolation: kf.interpolation, bezier: kf.bezier),
             ],
       };
 
@@ -577,8 +582,7 @@ extension TimelineEdits on Project {
         kept = [
           for (final c in kept)
             c.copyWith(
-              startTicks: c.startTicks -
-                  removed.where((r) => r.endTicks <= c.startTicks).fold<int>(0, (sum, r) => sum + r.durationTicks),
+              startTicks: c.startTicks - removed.where((r) => r.endTicks <= c.startTicks).fold<int>(0, (sum, r) => sum + r.durationTicks),
             ),
         ];
       }
@@ -714,7 +718,9 @@ extension TimelineEdits on Project {
     final pc = find(clipId);
     if (pc == null || pc.track.kind != TrackKind.text) throw const EditException('Not a text clip');
     _checkUnlocked(pc.track);
-    return _replaceClips({clipId: pc.clip.copyWith(data: {...pc.clip.data, 'text': text})});
+    return _replaceClips({
+      clipId: pc.clip.copyWith(data: {...pc.clip.data, 'text': text})
+    });
   }
 
   // --------------------------------------------------------------- tracks
@@ -731,9 +737,15 @@ extension TimelineEdits on Project {
     if (t.clips.isNotEmpty) {
       // Linked partners on other tracks stay, unlinked.
       final p = unlink(t.clips.map((c) => c.id));
-      return p._withTracks([for (final x in p.tracks) if (x.id != trackId) x]);
+      return p._withTracks([
+        for (final x in p.tracks)
+          if (x.id != trackId) x
+      ]);
     }
-    return _withTracks([for (final x in tracks) if (x.id != trackId) x]);
+    return _withTracks([
+      for (final x in tracks)
+        if (x.id != trackId) x
+    ]);
   }
 
   Project updateTrack(String trackId, {bool? locked, bool? hidden, bool? muted, String? name}) => _withTracks([
