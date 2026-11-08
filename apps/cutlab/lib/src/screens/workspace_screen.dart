@@ -1,14 +1,26 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../editor/editor_controller.dart';
 import '../engine/media_engine.dart';
 import '../format.dart';
-import '../theme.dart';
+import '../media/desktop_media_platform.dart';
+import '../media/media_platform.dart';
 import '../storage/app_settings.dart';
+import '../theme.dart';
+import '../timeline/clip_inspector.dart';
+import '../timeline/program_monitor.dart';
+import '../timeline/timeline_actions.dart';
+import '../timeline/timeline_assets.dart';
+import '../timeline/timeline_state.dart';
+import '../timeline/timeline_toolbar.dart';
+import '../timeline/timeline_view.dart';
 import 'dialogs.dart';
 import 'project_settings_form.dart';
 import 'source_viewer.dart';
@@ -16,6 +28,8 @@ import 'source_viewer.dart';
 /// Width at which the desktop workspace (side panels) replaces the
 /// touch-first mobile layout.
 const double kDesktopBreakpoint = 1000;
+
+enum _Monitor { program, source }
 
 /// The editing workspace for one project.
 class WorkspaceScreen extends StatefulWidget {
@@ -30,13 +44,23 @@ class WorkspaceScreen extends StatefulWidget {
 
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   late final AppLifecycleListener _lifecycle;
+  late final TimelineState _tl = TimelineState();
+  late final TimelineAssets _assets = TimelineAssets(c);
+  late final TimelineActions _actions = TimelineActions(c, _tl, onMessage: _snack);
+  final FocusNode _focus = FocusNode(debugLabel: 'workspace');
   String? _selectedMediaId;
+  _Monitor _monitor = _Monitor.program;
+  double _timelineWidth = 800;
+  bool _dropping = false;
 
   EditorController get c => widget.controller;
 
   MediaRef? get _selected => c.project.media.where((m) => m.id == _selectedMediaId).firstOrNull;
 
-  void _select(MediaRef m) => setState(() => _selectedMediaId = m.id);
+  void _select(MediaRef m) => setState(() {
+        _selectedMediaId = m.id;
+        _monitor = _Monitor.source;
+      });
 
   @override
   void initState() {
@@ -44,20 +68,28 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     // Going to the background may be the last chance before the OS kills
     // the app: write unsaved work to the recovery file.
     _lifecycle = AppLifecycleListener(onHide: () => unawaited(c.autosaveNow()));
+    c.addListener(_projectChanged);
     unawaited(c.checkMedia());
   }
+
+  void _projectChanged() => _tl.pruneSelection(c.project);
 
   @override
   void dispose() {
     _lifecycle.dispose();
+    c.removeListener(_projectChanged);
+    _focus.dispose();
+    _assets.dispose();
+    _tl.dispose();
     unawaited(c.close());
     super.dispose();
   }
 
   void _snack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   Future<void> _rename() async {
@@ -94,36 +126,188 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     if (!c.removeMedia(m.id)) _snack('"${m.displayName}" is used by ${c.project.clipsUsingMedia(m.id)} clip(s) and cannot be removed.');
   }
 
+  void _addToTimeline(MediaRef m) {
+    _actions.addMedia(m.id);
+    setState(() => _monitor = _Monitor.program);
+  }
+
+  Future<void> _addText() async {
+    final text = await promptText(context, title: 'Add text', initial: 'Title');
+    if (text != null && text.trim().isNotEmpty) _actions.addText(text.trim());
+  }
+
+  void _clipSettings() {
+    if (MediaQuery.sizeOf(context).width >= kDesktopBreakpoint) return; // always visible on desktop
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.6,
+        child: ClipInspector(controller: c, state: _tl, actions: _actions),
+      ),
+    );
+  }
+
+  /// Files dropped from Explorer: imported (no copies), analysed, then placed
+  /// one after another at the playhead.
+  Future<void> _onDrop(List<String> paths) async {
+    final picked = <PickedMedia>[];
+    for (final path in paths) {
+      final m = await DesktopMediaPlatform.describeFile(File(path));
+      if (m != null) picked.add(m);
+    }
+    if (picked.isEmpty) {
+      _snack('Those files are not supported media');
+      return;
+    }
+    final before = {for (final m in c.project.media) m.uri};
+    c.addMedia(picked);
+    final added = [
+      for (final m in c.project.media)
+        if (!before.contains(m.uri)) m.id,
+    ];
+    await c.probeMedia(added);
+    if (!mounted) return;
+    for (final id in added) {
+      final m = c.project.mediaById(id);
+      if (m == null) continue;
+      _actions.addMedia(id);
+      final placed = _tl.selection.isEmpty ? null : c.project.find(_tl.selection.first);
+      if (placed != null) _tl.setPlayhead(placed.clip.endTicks, c.project);
+    }
+    setState(() => _monitor = _Monitor.program);
+  }
+
+  bool get _typing {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    return ctx != null && (ctx.widget is EditableText || ctx.findAncestorWidgetOfExactType<EditableText>() != null);
+  }
+
+  Map<ShortcutActivator, VoidCallback> get _shortcuts {
+    VoidCallback g(VoidCallback f) => () {
+          if (!_typing) f();
+        };
+    void reveal() => _tl.revealPlayhead(_timelineWidth);
+    return {
+      const SingleActivator(LogicalKeyboardKey.keyS): g(_actions.split),
+      const SingleActivator(LogicalKeyboardKey.keyB, control: true): g(_actions.split),
+      const SingleActivator(LogicalKeyboardKey.delete): g(() => _actions.delete()),
+      const SingleActivator(LogicalKeyboardKey.backspace): g(() => _actions.delete()),
+      const SingleActivator(LogicalKeyboardKey.delete, shift: true): g(() => _actions.delete(ripple: true)),
+      const SingleActivator(LogicalKeyboardKey.keyC, control: true): g(_actions.copy),
+      const SingleActivator(LogicalKeyboardKey.keyX, control: true): g(_actions.cut),
+      const SingleActivator(LogicalKeyboardKey.keyV, control: true): g(_actions.paste),
+      const SingleActivator(LogicalKeyboardKey.keyD, control: true): g(_actions.duplicate),
+      const SingleActivator(LogicalKeyboardKey.keyA, control: true): g(_actions.selectAll),
+      const SingleActivator(LogicalKeyboardKey.keyZ, control: true): g(c.undo),
+      const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): g(c.redo),
+      const SingleActivator(LogicalKeyboardKey.keyY, control: true): g(c.redo),
+      const SingleActivator(LogicalKeyboardKey.keyS, control: true): g(() => unawaited(_save())),
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): g(() {
+        _actions.stepFrames(-1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.arrowRight): g(() {
+        _actions.stepFrames(1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true): g(() {
+        _actions.stepSeconds(-1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true): g(() {
+        _actions.stepSeconds(1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): g(() => _actions.nudge(-1)),
+      const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true): g(() => _actions.nudge(1)),
+      const SingleActivator(LogicalKeyboardKey.arrowUp): g(() {
+        _actions.toEdge(-1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.arrowDown): g(() {
+        _actions.toEdge(1);
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.home): g(() {
+        _actions.toStart();
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.end): g(() {
+        _actions.toEnd();
+        reveal();
+      }),
+      const SingleActivator(LogicalKeyboardKey.equal): g(() => _tl.zoomAround(1.5, _timelineWidth / 2)),
+      const SingleActivator(LogicalKeyboardKey.add): g(() => _tl.zoomAround(1.5, _timelineWidth / 2)),
+      const SingleActivator(LogicalKeyboardKey.minus): g(() => _tl.zoomAround(1 / 1.5, _timelineWidth / 2)),
+      const SingleActivator(LogicalKeyboardKey.keyN): g(() {
+        _tl.snapping = !_tl.snapping;
+        _tl.touch();
+      }),
+      const SingleActivator(LogicalKeyboardKey.escape): g(_tl.clearSelection),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: c,
-      builder: (context, _) {
-        final wide = MediaQuery.sizeOf(context).width >= kDesktopBreakpoint;
-        return Scaffold(
-          appBar: AppBar(
-            titleSpacing: 0,
-            title: InkWell(
-              onTap: _rename,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: CutlabSpacing.sm),
-                child: Text(c.project.name, overflow: TextOverflow.ellipsis),
+    final wide = MediaQuery.sizeOf(context).width >= kDesktopBreakpoint;
+    Widget body = SafeArea(child: wide ? _desktop() : _mobile());
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      body = DropTarget(
+        onDragEntered: (_) => setState(() => _dropping = true),
+        onDragExited: (_) => setState(() => _dropping = false),
+        onDragDone: (d) {
+          setState(() => _dropping = false);
+          unawaited(_onDrop([for (final f in d.files) f.path]));
+        },
+        child: Stack(children: [
+          Positioned.fill(child: body),
+          if (_dropping)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  color: CutlabColors.accent.withAlpha(40),
+                  alignment: Alignment.center,
+                  child: const Text('Drop to import and add to the timeline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                ),
               ),
             ),
-            actions: [
-              IconButton(key: const Key('undo'), tooltip: 'Undo', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
-              IconButton(key: const Key('redo'), tooltip: 'Redo', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
-              _SaveButton(state: c.saveState, onSave: _save),
-              if (wide)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),
-                  child: _ModeSwitch(mode: c.project.editorMode, onChanged: c.setMode),
+        ]),
+      );
+    }
+    return CallbackShortcuts(
+      bindings: _shortcuts,
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        child: ListenableBuilder(
+          listenable: c,
+          builder: (context, _) => Scaffold(
+            appBar: AppBar(
+              titleSpacing: 0,
+              title: InkWell(
+                onTap: _rename,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: CutlabSpacing.sm),
+                  child: Text(c.project.name, overflow: TextOverflow.ellipsis),
                 ),
-            ],
+              ),
+              actions: [
+                IconButton(key: const Key('undo'), tooltip: 'Undo (Ctrl+Z)', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
+                IconButton(key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
+                _SaveButton(state: c.saveState, onSave: _save),
+                if (wide)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),
+                    child: _ModeSwitch(mode: c.project.editorMode, onChanged: c.setMode),
+                  ),
+              ],
+            ),
+            body: body,
           ),
-          body: SafeArea(child: wide ? _desktop() : _mobile()),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -131,6 +315,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         controller: c,
         selectedId: _selectedMediaId,
         onSelect: _select,
+        onAdd: _addToTimeline,
         onImport: _import,
         onRelink: _relink,
         onRemove: _remove,
@@ -138,13 +323,70 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Widget _preview() => ValueListenableBuilder<AppSettings>(
         valueListenable: widget.settings,
-        builder: (context, settings, _) => _PreviewPanel(
-          controller: c,
-          media: _selected,
-          available: _selected == null ? null : c.isAvailable(_selected!.id),
-          settings: settings,
+        builder: (context, settings, _) => Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(CutlabSpacing.xs),
+                child: SegmentedButton<_Monitor>(
+                  key: const Key('monitorSwitch'),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  segments: const [
+                    ButtonSegment(value: _Monitor.program, label: Text('Timeline')),
+                    ButtonSegment(value: _Monitor.source, label: Text('Source')),
+                  ],
+                  selected: {_monitor},
+                  onSelectionChanged: (v) => setState(() => _monitor = v.first),
+                ),
+              ),
+              Expanded(
+                child: _monitor == _Monitor.program
+                    ? ProgramMonitor(controller: c, state: _tl, assets: _assets, settings: settings)
+                    : _PreviewPanel(
+                        controller: c,
+                        media: _selected,
+                        available: _selected == null ? null : c.isAvailable(_selected!.id),
+                        settings: settings,
+                      ),
+              ),
+            ],
+          ),
         ),
       );
+
+  Widget _timeline() => LayoutBuilder(builder: (context, box) {
+        _timelineWidth = box.maxWidth - headerWidth;
+        return Column(
+          children: [
+            TimelineToolbar(
+              controller: c,
+              state: _tl,
+              actions: _actions,
+              onAddText: _addText,
+              onClipSettings: _clipSettings,
+              viewportWidth: _timelineWidth,
+            ),
+            Expanded(
+              child: DragTarget<String>(
+                onAcceptWithDetails: (d) {
+                  final box2 = context.findRenderObject() as RenderBox?;
+                  if (box2 == null) return;
+                  final local = box2.globalToLocal(d.offset);
+                  final at = _tl.ticksAtX(local.dx - headerWidth);
+                  _actions.addMedia(d.data, at: at < 0 ? 0 : at);
+                  setState(() => _monitor = _Monitor.program);
+                },
+                builder: (context, candidate, _) => DecoratedBox(
+                  decoration: BoxDecoration(border: candidate.isEmpty ? null : Border.all(color: CutlabColors.accent, width: 2)),
+                  child: TimelineView(controller: c, state: _tl, assets: _assets),
+                ),
+              ),
+            ),
+          ],
+        );
+      });
 
   Widget _desktop() {
     return Padding(
@@ -152,7 +394,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       child: Column(
         children: [
           Expanded(
-            flex: 3,
+            flex: 5,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -160,12 +402,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 const SizedBox(width: CutlabSpacing.sm),
                 Expanded(child: _preview()),
                 const SizedBox(width: CutlabSpacing.sm),
-                SizedBox(width: 320, child: _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))),
+                SizedBox(
+                  width: 320,
+                  child: ListenableBuilder(
+                    listenable: _tl,
+                    builder: (context, _) => _tl.selection.isEmpty
+                        ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))
+                        : _Panel(title: 'Clip', child: ClipInspector(controller: c, state: _tl, actions: _actions)),
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: CutlabSpacing.sm),
-          Expanded(flex: 2, child: _Panel(title: 'Timeline', child: _TimelineView(project: c.project))),
+          Expanded(flex: 4, child: Card(clipBehavior: Clip.antiAlias, child: _timeline())),
         ],
       ),
     );
@@ -185,17 +435,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           ),
           TabBar(
             tabs: [
-              Tab(text: 'Media (${c.project.media.length})'),
               const Tab(text: 'Timeline'),
+              Tab(text: 'Media (${c.project.media.length})'),
               const Tab(text: 'Project'),
             ],
           ),
           Expanded(
             flex: 5,
             child: TabBarView(
+              physics: const NeverScrollableScrollPhysics(), // horizontal drags belong to the timeline
               children: [
+                _timeline(),
                 _mediaPanel(),
-                _TimelineView(project: c.project),
                 _ProjectPanel(controller: c, showMode: true),
               ],
             ),
@@ -324,6 +575,7 @@ class _MediaPanel extends StatelessWidget {
     required this.controller,
     required this.selectedId,
     required this.onSelect,
+    required this.onAdd,
     required this.onImport,
     required this.onRelink,
     required this.onRemove,
@@ -332,6 +584,7 @@ class _MediaPanel extends StatelessWidget {
   final EditorController controller;
   final String? selectedId;
   final ValueChanged<MediaRef> onSelect;
+  final ValueChanged<MediaRef> onAdd;
   final VoidCallback onImport;
   final ValueChanged<MediaRef> onRelink;
   final ValueChanged<MediaRef> onRemove;
@@ -385,6 +638,8 @@ class _MediaPanel extends StatelessWidget {
             probeError: controller.probeError(m.id),
             selected: m.id == selectedId,
             onSelect: () => onSelect(m),
+            onAdd: () => onAdd(m),
+            draggable: MediaQuery.sizeOf(context).width >= kDesktopBreakpoint,
             onRelink: () => onRelink(m),
             onRemove: () => onRemove(m),
           ),
@@ -404,6 +659,8 @@ class _MediaTile extends StatelessWidget {
     required this.probeError,
     required this.selected,
     required this.onSelect,
+    required this.onAdd,
+    required this.draggable,
     required this.onRelink,
     required this.onRemove,
   });
@@ -416,6 +673,8 @@ class _MediaTile extends StatelessWidget {
   final String? probeError;
   final bool selected;
   final VoidCallback onSelect;
+  final VoidCallback onAdd;
+  final bool draggable;
   final VoidCallback onRelink;
   final VoidCallback onRemove;
 
@@ -441,7 +700,7 @@ class _MediaTile extends StatelessWidget {
             if (probing) 'reading…',
             if (probeError != null && info == null) 'unreadable',
           ].join(' · ');
-    return Padding(
+    final tile = Padding(
       padding: const EdgeInsets.only(top: CutlabSpacing.sm),
       child: Material(
         color: selected ? CutlabColors.accent.withAlpha(30) : Colors.transparent,
@@ -478,6 +737,12 @@ class _MediaTile extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                key: Key('addToTimeline-${media.id}'),
+                tooltip: 'Add to timeline at the playhead',
+                icon: const Icon(Icons.add_box_outlined),
+                onPressed: missing ? null : onAdd,
+              ),
               PopupMenuButton<String>(
                 tooltip: 'Media actions',
                 onSelected: (v) => v == 'relink' ? onRelink() : onRemove(),
@@ -490,6 +755,21 @@ class _MediaTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (!draggable || missing) return tile;
+    // Desktop: drag a file onto the timeline to place it where it is dropped.
+    return Draggable<String>(
+      data: media.id,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: CutlabColors.accent, borderRadius: BorderRadius.circular(6)),
+          child: Text(media.displayName, style: const TextStyle(color: CutlabColors.onAccent, fontWeight: FontWeight.w700)),
+        ),
+      ),
+      child: tile,
     );
   }
 }
@@ -536,78 +816,6 @@ class _ProjectPanel extends StatelessWidget {
           ),
         const SizedBox(height: CutlabSpacing.lg),
         CanvasAndRatePicker(settings: s, onChanged: controller.updateSettings),
-      ],
-    );
-  }
-}
-
-// -------------------------------------------------------------- timeline
-
-class _TimelineView extends StatelessWidget {
-  const _TimelineView({required this.project});
-  final Project project;
-
-  Color _color(TrackKind k) => switch (k) {
-        TrackKind.video => CutlabColors.videoTrack,
-        TrackKind.audio => CutlabColors.audioTrack,
-        TrackKind.text => CutlabColors.textTrack,
-        TrackKind.image => CutlabColors.imageTrack,
-      };
-
-  IconData _icon(TrackKind k) => switch (k) {
-        TrackKind.video => Icons.movie_outlined,
-        TrackKind.audio => Icons.music_note_outlined,
-        TrackKind.text => Icons.title,
-        TrackKind.image => Icons.image_outlined,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final advanced = project.editorMode == EditorMode.advanced;
-    return ListView(
-      padding: const EdgeInsets.all(CutlabSpacing.sm),
-      children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: Text(
-            formatTimecode(project.durationTicks, project.settings.frameRate),
-            key: const Key('timelineDuration'),
-            style: const TextStyle(fontSize: 11, color: CutlabColors.textMuted),
-          ),
-        ),
-        const SizedBox(height: CutlabSpacing.xs),
-        for (final t in project.tracks)
-          Container(
-            margin: const EdgeInsets.only(bottom: CutlabSpacing.xs),
-            height: 36,
-            decoration: BoxDecoration(
-              color: CutlabColors.surfaceRaised,
-              borderRadius: BorderRadius.circular(8),
-              border: Border(left: BorderSide(color: _color(t.kind), width: 4)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),
-            child: Row(
-              children: [
-                Icon(_icon(t.kind), size: 16, color: CutlabColors.textMuted),
-                const SizedBox(width: CutlabSpacing.sm),
-                Expanded(child: Text(t.name, overflow: TextOverflow.ellipsis)),
-                Text('${t.clips.length} clips', style: const TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
-                if (advanced) ...[
-                  const SizedBox(width: CutlabSpacing.sm),
-                  Icon(t.locked ? Icons.lock : Icons.lock_open, size: 14, color: CutlabColors.textMuted),
-                  const SizedBox(width: CutlabSpacing.xs),
-                  Icon(t.hidden ? Icons.visibility_off : Icons.visibility, size: 14, color: CutlabColors.textMuted),
-                  const SizedBox(width: CutlabSpacing.xs),
-                  Icon(t.muted ? Icons.volume_off : Icons.volume_up, size: 14, color: CutlabColors.textMuted),
-                ],
-              ],
-            ),
-          ),
-        const Padding(
-          padding: EdgeInsets.only(top: CutlabSpacing.sm),
-          child: Text('Placing and editing clips — Phase 4.',
-              textAlign: TextAlign.center, style: TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
-        ),
       ],
     );
   }

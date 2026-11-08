@@ -15,7 +15,7 @@ Project baseProject({Rational fps = Rational.fps30}) {
     MediaRef(id: 'gameplay', kind: MediaKind.video, uri: '/g.mp4', displayName: 'g.mp4', durationTicks: 3600 * tps, hasAudio: true),
     MediaRef(id: 'music', kind: MediaKind.audio, uri: '/m.mp3', displayName: 'm.mp3', durationTicks: 180 * tps, hasAudio: true),
     MediaRef(id: 'photo', kind: MediaKind.image, uri: '/p.png', displayName: 'p.png', durationTicks: 0),
-    MediaRef(id: 'short', kind: MediaKind.video, uri: '/s.mp4', displayName: 's.mp4', durationTicks: 10 * tps),
+    MediaRef(id: 'short', kind: MediaKind.video, uri: '/s.mp4', displayName: 's.mp4', durationTicks: 10 * tps, hasAudio: true),
   ]);
 }
 
@@ -364,9 +364,9 @@ void main() {
     final String v;
     (p, v) = p.addMediaClip('gameplay', 0, ids);
     final sw = Stopwatch()..start();
-    // 300 cuts across one hour of gameplay.
+    // 300 cuts across the first 55 minutes of a one-hour recording.
     for (var i = 1; i <= 300; i++) {
-      (p, _) = p.split(i * 12 * tps, ids, clipIds: [p.clipsAt(i * 12 * tps).single.clip.id]);
+      (p, _) = p.split(i * 11 * tps, ids, clipIds: [p.clipsAt(i * 11 * tps).single.clip.id]);
     }
     p = p.deleteClips([v], ripple: true);
     final json = const ProjectCodec().encode(p);

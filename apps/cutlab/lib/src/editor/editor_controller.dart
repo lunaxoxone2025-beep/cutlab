@@ -59,6 +59,9 @@ class EditorController extends ChangeNotifier {
   bool get canRedo => _redo.isNotEmpty;
   bool get hasUnsavedChanges => _state == SaveState.unsaved || _state == SaveState.error;
 
+  /// A new unique id for clips, tracks and links.
+  String newId() => store.newId();
+
   /// Applies [change] as one undoable step.
   void edit(Project Function(Project p) change) {
     final next = change(_project);

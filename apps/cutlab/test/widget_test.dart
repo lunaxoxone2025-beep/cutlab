@@ -5,8 +5,10 @@ import 'package:cutlab/src/services.dart';
 import 'package:cutlab/src/storage/app_settings.dart';
 import 'package:cutlab/src/storage/project_store.dart';
 import 'package:cutlab/src/storage/store_backend.dart';
+import 'package:cutlab/src/timeline/timeline_state.dart';
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -98,9 +100,10 @@ void main() {
     await tester.tap(find.text('Auto'));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('tlRipple')), findsNothing, reason: 'beginner mode hides advanced tools');
     await tester.tap(_mode('Advanced'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.lock_open), findsNWidgets(3));
+    expect(find.byKey(const Key('tlRipple')), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -216,7 +219,7 @@ void main() {
     await h.pump(tester, desktop);
     await tester.tap(find.text('Viewer'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Tap a file in Media'), findsOneWidget);
+    expect(find.textContaining('Add media to the timeline'), findsOneWidget);
     expect(find.textContaining('H264 · 60 fps'), findsOneWidget, reason: 'probe summary in the media list');
 
     await tester.tap(find.text('ranked.mp4'));
@@ -267,6 +270,80 @@ void main() {
     expect(h.services.settings.value.previewHeight, 540);
     expect(h.services.settings.value.hardwareDecoding, isFalse);
     expect((await h.services.settingsStore.load()).previewHeight, 540);
+  });
+
+  testWidgets('timeline: add, split with S, select, delete, undo — and it is saved', (tester) async {
+    final h = Harness();
+    final p = await h.store.create(name: 'Cut');
+    await h.store.save(p.copyWith(media: [video('match.mp4', uri: '/v/match.mp4', durationMs: 20000).toMediaRef('m1')]));
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Cut'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('addToTimeline-m1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('/ 00:00:20:00'), findsOneWidget, reason: 'timeline now 20 s long');
+
+    final canvas = find.byKey(const Key('timelineCanvas'));
+    final origin = tester.getTopLeft(canvas);
+    // Tap the ruler 100 px in: 100 / 40 px-per-second = 2.5 s.
+    await tester.tapAt(origin + const Offset(100, 10));
+    await tester.pumpAndSettle();
+    expect(find.text('00:00:02:15'), findsWidgets);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+
+    // Select the second half (video row: below the text row) and delete it.
+    final videoRowY = rulerHeight + trackHeight(TrackKind.text) + 2 + 20;
+    await tester.tapAt(origin + Offset(300, videoRowY));
+    await tester.pumpAndSettle();
+    expect(find.text('CLIP'), findsOneWidget, reason: 'the inspector shows the selected clip');
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pumpAndSettle();
+    expect(find.text('CLIP'), findsNothing);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final saved = await h.store.open(p.id);
+    final clips = saved.tracks.firstWhere((t) => t.kind == TrackKind.video).clips;
+    expect(clips, hasLength(2), reason: 'split kept, delete undone');
+    expect(clips.first.endTicks, framesToTicks(75, Rational.fps30));
+    expect(clips.last.sourceInTicks, clips.first.durationTicks);
+  });
+
+  testWidgets('text clips from the toolbar show in the monitor', (tester) async {
+    final h = Harness();
+    await h.store.create(name: 'Titles');
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Titles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tlText')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('promptField')), 'Ace!');
+    await tester.tap(find.byKey(const Key('promptOk')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('monitorTitles'))).data, 'Ace!');
+    // The inspector edits the selected title's duration.
+    await tester.tap(find.byKey(const Key('durPlus')));
+    await tester.pumpAndSettle();
+    expect(find.text('4.00 s'), findsOneWidget);
+  });
+
+  testWidgets('phone layout opens on the timeline with its tools', (tester) async {
+    final h = Harness();
+    await h.store.create(name: 'Phone');
+    await h.pump(tester, phone);
+    await tester.tap(find.text('Phone'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tlSplit')), findsOneWidget);
+    expect(find.byKey(const Key('timelineCanvas')), findsOneWidget);
+    expect(find.text('Video 1'), findsOneWidget);
   });
 
   test('formatting helpers', () {
