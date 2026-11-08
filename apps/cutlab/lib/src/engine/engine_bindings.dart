@@ -51,25 +51,28 @@ class EngineBindings {
             .lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>('cutlab_diag_init'),
         diagNote = lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('cutlab_diag_note'),
         diagRecent = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_diag_recent'),
-        tlOpen = lib.lookupFunction<Int32 Function(Int32, Int32, Int32, Pointer<Pointer<Void>>), int Function(int, int, int, Pointer<Pointer<Void>>)>(
-            'cutlab_timeline_open'),
+        tlOpen = lib.lookupFunction<Int32 Function(Int32, Int32, Int32, Pointer<Pointer<Void>>),
+            int Function(int, int, int, Pointer<Pointer<Void>>)>('cutlab_timeline_open'),
         tlClose = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_close'),
         tlSetPlan = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>), int Function(Pointer<Void>, Pointer<Utf8>)>(
             'cutlab_timeline_set_plan'),
         tlPlay = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_play'),
         tlPause = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_pause'),
         tlPlaying = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_playing'),
-        tlSeek = lib.lookupFunction<Void Function(Pointer<Void>, Int64, Int32), void Function(Pointer<Void>, int, int)>('cutlab_timeline_seek'),
+        tlSeek =
+            lib.lookupFunction<Void Function(Pointer<Void>, Int64, Int32), void Function(Pointer<Void>, int, int)>('cutlab_timeline_seek'),
         tlPosition = lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_position'),
         tlDuration = lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_duration'),
         tlFrame = lib.lookupFunction<
             Int32 Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, Int64, Pointer<Int32>, Pointer<Int32>, Pointer<Int64>),
             int Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, int, Pointer<Int32>, Pointer<Int32>,
                 Pointer<Int64>)>('cutlab_timeline_frame'),
-        tlLevels = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Float>, Int32), int Function(Pointer<Void>, Pointer<Float>, int)>(
-            'cutlab_timeline_levels'),
-        tlStats = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
-            'cutlab_timeline_stats'),
+        tlLevels =
+            lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Float>, Int32), int Function(Pointer<Void>, Pointer<Float>, int)>(
+                'cutlab_timeline_levels'),
+        tlStats =
+            lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
+                'cutlab_timeline_stats'),
         tlRenderAudio = lib.lookupFunction<Int32 Function(Pointer<Void>, Int64, Int32, Pointer<Float>, Pointer<Float>, Int32),
             int Function(Pointer<Void>, int, int, Pointer<Float>, Pointer<Float>, int)>('cutlab_timeline_render_audio');
 

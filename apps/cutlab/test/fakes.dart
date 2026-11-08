@@ -82,6 +82,7 @@ class FakeMediaEngine extends MediaEngine {
     timelines.add(t);
     return t;
   }
+
   int probeCalls = 0;
 
   @override
@@ -158,7 +159,6 @@ ProbeInfo videoProbe({int seconds = 7200, Rational fps = Rational.fps60}) => Pro
       sampleRate: 48000,
       channels: 2,
     );
-
 
 /// Records what the playback controller asks of the timeline renderer.
 class FakeTimeline implements TimelineRenderer {

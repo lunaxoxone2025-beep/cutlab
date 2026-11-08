@@ -751,8 +751,7 @@ extension TimelineEdits on Project {
   /// Track switches and mix settings. [volume] is clamped to 0–2.
   /// (Mixing — mute, solo, volume — also works on locked tracks: locking
   /// protects the clips, not the monitoring.)
-  Project updateTrack(String trackId, {bool? locked, bool? hidden, bool? muted, bool? solo, double? volume, String? name}) =>
-      _withTracks([
+  Project updateTrack(String trackId, {bool? locked, bool? hidden, bool? muted, bool? solo, double? volume, String? name}) => _withTracks([
         for (final t in tracks)
           t.id == trackId
               ? t.copyWith(locked: locked, hidden: hidden, muted: muted, solo: solo, volume: volume?.clamp(0.0, 2.0), name: name)

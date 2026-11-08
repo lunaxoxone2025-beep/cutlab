@@ -25,12 +25,16 @@ Project project() {
       pf.Clip(id: 'c2', mediaId: 'mute', startTicks: 10 * tps, durationTicks: 5 * tps),
     ]),
     p.tracks[1].copyWith(clips: const [
-      pf.Clip(id: 'c3', mediaId: 'song', startTicks: 2 * tps, durationTicks: 20 * tps, volume: 0.5, fadeInTicks: tps, fadeOutTicks: 2 * tps),
+      pf.Clip(
+          id: 'c3', mediaId: 'song', startTicks: 2 * tps, durationTicks: 20 * tps, volume: 0.5, fadeInTicks: tps, fadeOutTicks: 2 * tps),
     ]),
     p.tracks[2].copyWith(clips: const [
       pf.Clip(id: 'txt', startTicks: 0, durationTicks: 3 * tps, data: {'text': 'Hi'}),
     ]),
-    const Track(id: 'i1', kind: TrackKind.image, clips: [pf.Clip(id: 'c4', mediaId: 'pic', startTicks: 0, durationTicks: 2 * tps, sourceInTicks: 7)]),
+    const Track(
+        id: 'i1',
+        kind: TrackKind.image,
+        clips: [pf.Clip(id: 'c4', mediaId: 'pic', startTicks: 0, durationTicks: 2 * tps, sourceInTicks: 7)]),
   ]);
 }
 

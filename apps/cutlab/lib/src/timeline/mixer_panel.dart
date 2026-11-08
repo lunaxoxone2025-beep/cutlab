@@ -125,9 +125,21 @@ class _Strip extends StatelessWidget {
               Text(showDb ? gainLabel(volume) : '${(volume * 100).round()}%',
                   key: Key('gain-$id'), style: const TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
               if (onMute != null)
-                _Toggle(key: Key('mute-$id'), label: 'M', tooltip: muted ? 'Unmute' : 'Mute', on: muted, color: CutlabColors.danger, onTap: onMute!),
+                _Toggle(
+                    key: Key('mute-$id'),
+                    label: 'M',
+                    tooltip: muted ? 'Unmute' : 'Mute',
+                    on: muted,
+                    color: CutlabColors.danger,
+                    onTap: onMute!),
               if (showSolo && onSolo != null)
-                _Toggle(key: Key('solo-$id'), label: 'S', tooltip: solo ? 'Unsolo' : 'Solo', on: solo, color: CutlabColors.imageTrack, onTap: onSolo!),
+                _Toggle(
+                    key: Key('solo-$id'),
+                    label: 'S',
+                    tooltip: solo ? 'Unsolo' : 'Solo',
+                    on: solo,
+                    color: CutlabColors.imageTrack,
+                    onTap: onSolo!),
             ],
           ),
           Row(
