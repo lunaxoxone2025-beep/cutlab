@@ -166,9 +166,12 @@ jobs:
           disable-animations: true
           script: bash scripts/android/run_emulator_tests.sh build/native build/media apps/cutlab build/emulator-logs
       - name: Check the files exported on the emulator independently (ffprobe, full decode)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-          python3 scripts/verify_exports.py build/emulator-logs/exports
+          scripts/fetch_ffmpeg_cli_linux.sh "${{ runner.temp }}/ffcli"
+          B="${{ runner.temp }}/ffcli/bin"
+          python3 scripts/verify_exports.py build/emulator-logs/exports "$B/ffprobe" "$B/ffmpeg"
       - name: Results
         if: always()
         run: |

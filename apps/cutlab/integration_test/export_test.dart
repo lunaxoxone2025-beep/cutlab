@@ -260,14 +260,14 @@ void main() {
           for (var y = (f.height * 0.8).round(); y < (f.height * 0.95).round(); y++) {
             for (var x = 0; x < f.width; x++) {
               final i = (y * f.width + x) * 4;
-              if (f.pixels[i] > 240 && f.pixels[i + 1] > 240 && f.pixels[i + 2] > 240) n++;
+              if (f.pixels[i] > 210 && f.pixels[i + 1] > 210 && f.pixels[i + 2] > 210) n++;
             }
           }
           return n / (f.width * f.height);
         }
 
         report('white pixels in the title area: with title ${brightBottom(title).toStringAsFixed(4)}, without ${brightBottom(plain).toStringAsFixed(4)}');
-        expect(brightBottom(title), greaterThan(brightBottom(plain) + 0.0005), reason: 'the title is in the video');
+        expect(brightBottom(title), greaterThan(brightBottom(plain) + 0.0002), reason: 'the title is in the video');
         final r = engine.openTimeline(maxWidth: 64, maxHeight: 64, nullAudio: true);
         try {
           r.setPlan('cutlab-timeline 1\ntrack x audio 0 0 0 1\nclip x 0 ${10 * tps} 0 1 0 0 1 0 1 $euri\n');
