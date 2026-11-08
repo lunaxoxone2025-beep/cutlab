@@ -227,7 +227,12 @@ void main() {
         .toList();
     report('editor export in ${sw.elapsedMilliseconds} ms: ${texts.join(' | ')}');
     expect(find.text('Video exported and checked'), findsOneWidget, reason: texts.join(' | '));
-    final location = (find.byKey(const Key('exportLocation')).evaluate().single.widget as Text).data!;
+    final location = (find
+            .descendant(of: find.byKey(const Key('exportLocation')), matching: find.byType(Text))
+            .evaluate()
+            .last
+            .widget as Text)
+        .data!;
     expect(texts.join(' '), contains('1280 × 720 · 30 fps'));
 
     // Read the file back: picture with the title, sound where the track is.

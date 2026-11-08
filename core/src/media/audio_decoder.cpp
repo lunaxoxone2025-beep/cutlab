@@ -1,6 +1,5 @@
 #include "audio_decoder.hpp"
 
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -38,7 +37,15 @@ AudioDecoder::~AudioDecoder() {
 
 void AudioDecoder::seek(Ticks t) {
   t = std::max<Ticks>(0, t);
-  const int64_t ts = ticks_to_pts(t + start_, st_->time_base);
+  // Decoders need some audio before the target to settle after a seek
+  // (AAC/MP3: their overlapping transforms; Opus declares 80 ms of
+  // "pre-roll", but its energy prediction takes ~3 times that to reach the
+  // full level). Decoding starts earlier and append() trims to exactly t.
+  Ticks preroll = kTicksPerSecond / 10;
+  if (st_->codecpar->seek_preroll > 0 && st_->codecpar->sample_rate > 0) {
+    preroll = std::max(preroll, 4 * mul_div(st_->codecpar->seek_preroll, kTicksPerSecond, st_->codecpar->sample_rate, Rounding::Up));
+  }
+  const int64_t ts = ticks_to_pts(std::max<Ticks>(0, t - preroll) + start_, st_->time_base);
   if (av_seek_frame(demux_.fmt(), stream_, ts, AVSEEK_FLAG_BACKWARD) < 0) {
     avformat_seek_file(demux_.fmt(), stream_, INT64_MIN, ts, ts, 0);
   }
@@ -67,8 +74,10 @@ void AudioDecoder::append(const float* data, size_t frames, Ticks chunk_time) {
   const Ticks diff = chunk_time - expected;
   if (diff > tolerance) silence = mul_div(diff, rate_, kTicksPerSecond, Rounding::Nearest);
   if (diff < -tolerance) skip = mul_div(-diff, rate_, kTicksPerSecond, Rounding::Nearest);
-  aligned_ = true;
+  // Whole chunks before the target (decoder pre-roll) are dropped; the
+  // first sample kept is exactly at the target.
   if (skip >= static_cast<int64_t>(frames)) return;
+  aligned_ = true;
   if (silence > 0) {
     // Cap pathological gaps (broken timestamps) at 10 s of silence.
     silence = std::min<int64_t>(silence, static_cast<int64_t>(rate_) * 10);

@@ -472,9 +472,17 @@ void test_formats(const std::vector<Enc>& encs) {
     CHECK_NEAR(num(pr, "durationTicks") / SEC, 2.0, 0.06);
     const Pic o = frame(s.path, 1500 * MS);
     const Pic src = frame(media("gray60.mp4"), 1500 * MS);
-    CHECK(o.ok && src.ok);
-    if (o.ok && src.ok) CHECK_NEAR(o.at(320, 180), src.at(src.w / 2, src.h / 2), 8);
-    CHECK_NEAR(rms(sound(s.path, 1000 * MS, 9600)), 0.5 / std::sqrt(2.0), 0.03);
+    if (!o.ok && std::string(c.codec) == "av1") {
+      // Builds without an AV1 decoder (Linux, the Android emulator engine):
+      // the picture is checked by scripts/verify_exports.py instead.
+      std::printf("format av1/%s: this build cannot decode AV1; picture checked by ffprobe/ffmpeg\n", c.container);
+    } else {
+      CHECK(o.ok && src.ok);
+      if (o.ok && src.ok) CHECK_NEAR(o.at(320, 180), src.at(src.w / 2, src.h / 2), 8);
+    }
+    const double level = rms(sound(s.path, 1000 * MS, 9600));
+    std::printf("format %s/%s: sound rms %.4f (expected %.4f)\n", c.codec, c.container, level, 0.5 / std::sqrt(2.0));
+    CHECK_NEAR(level, 0.5 / std::sqrt(2.0), 0.03);
     record(s.path, 640, 360, "30", 60, c.probe_codec, std::string(c.audio) == "opus" ? "opus" : "aac");
     std::printf("format %s/%s: %s, %.2f s, %lld bytes\n", c.codec, c.container, str(st, "encoder").c_str(), secs,
                 static_cast<long long>(num(st, "bytes")));

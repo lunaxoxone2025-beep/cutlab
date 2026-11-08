@@ -95,7 +95,7 @@ void main() {
     });
 
     test('bitrate and size estimate (the engine formula)', () {
-      const s = VideoExportSettings(frameRate: Rational(60, 1));
+      const s = VideoExportSettings(frameRate: Rational.fps60);
       // High quality H.264 1080p60 ≈ 12 Mbit/s (engine quality_bitrate).
       expect(s.videoBitrate(1920, 1080), closeTo(12.0e6, 0.2e6));
       expect(s.copyWith(quality: ExportQuality.best).videoBitrate(1920, 1080), greaterThan(s.videoBitrate(1920, 1080)));
@@ -194,7 +194,7 @@ void main() {
       expect(job.setting('path'), '/exports/out.mp4');
       expect(job.setting('size'), '1920x1080');
       expect(job.setting('fps'), '60/1');
-      expect(job.setting('encoder'), 'h264_fakehw,libopenh264');
+      expect(job.setting('encoder'), 'h264_fakehw/hw,libopenh264/sw');
       expect(media.exportNames.single, 'Ranked 20261108-183005.mp4');
       expect(media.background.first, startsWith('start'));
       expect(c.phase, ExportPhase.rendering);
@@ -230,7 +230,7 @@ void main() {
       expect(c.encoder?.name, 'libvpx-vp9');
       await c.start();
       final job = engine.exports.single;
-      expect(job.setting('encoder'), 'libvpx-vp9');
+      expect(job.setting('encoder'), 'libvpx-vp9/sw');
       expect(job.setting('container'), 'webm');
       expect(job.setting('audio'), 'opus');
       expect(job.plan, contains('hardware 0'));
@@ -296,7 +296,7 @@ void main() {
 
       await c.retryInSoftware();
       expect(engine.exports.last.setting('hardware'), '0');
-      expect(engine.exports.last.setting('encoder'), 'libopenh264');
+      expect(engine.exports.last.setting('encoder'), 'libopenh264/sw');
       engine.probes['/exports/out.mp4'] = exported(w: 1280, fps: Rational.fps30);
       engine.exports.last.finish();
       await tester.pump(const Duration(milliseconds: 300));

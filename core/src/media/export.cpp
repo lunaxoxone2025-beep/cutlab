@@ -636,12 +636,18 @@ void Exporter::work() {
     std::vector<EncoderInfo> order;
     const auto all = available_encoders(false);
     if (!s.encoder.empty()) {
+      // Each entry is "name", "name/hw" or "name/sw" (Windows' Media
+      // Foundation encoders exist in a hardware and a software variant).
       std::istringstream names(s.encoder);
-      std::string name;
-      while (std::getline(names, name, ',')) {
+      std::string entry;
+      while (std::getline(names, entry, ',')) {
+        const auto slash = entry.find('/');
+        const std::string name = entry.substr(0, slash);
+        const std::string variant = slash == std::string::npos ? "" : entry.substr(slash + 1);
         for (const auto& e : all) {
           const bool hw_variant = e.hardware;
           if (e.name != name || e.codec != s.video_codec || (hw_variant && !s.hardware)) continue;
+          if ((variant == "hw" && !hw_variant) || (variant == "sw" && hw_variant)) continue;
           if (std::none_of(order.begin(), order.end(), [&](const EncoderInfo& o) { return o.name == e.name && o.hardware == e.hardware; })) {
             order.push_back(e);
           }

@@ -169,7 +169,7 @@ class ExportController extends ChangeNotifier {
     try {
       final (w, h) = outputSize;
       final plan = await _plan(w, h);
-      final text = '${s.engineText(path: target, width: w, height: h)}encoder ${order.map((e) => e.name).toSet().join(',')}\n';
+      final text = '${s.engineText(path: target, width: w, height: h)}encoder ${order.map((e) => '${e.name}/${e.hardware ? 'hw' : 'sw'}').join(',')}\n';
       _job = engine.startExport(plan, text);
     } on Object catch (e) {
       _fail('The export could not start: $e');
@@ -335,8 +335,9 @@ class ExportController extends ChangeNotifier {
         _verifyProblems.add(
             'length is ${formatDuration(ticksToDuration(info.durationTicks))}, expected ${formatDuration(ticksToDuration(durationTicks))}');
       }
-      if (info.videoCodec != _settings.codec.name)
+      if (info.videoCodec != _settings.codec.name) {
         _verifyProblems.add('video codec is ${info.videoCodec}, expected ${_settings.codec.name}');
+      }
       if (info.audioCodec == null) _verifyProblems.add('no sound track');
     } on Object catch (e) {
       _verifyProblems.add('the file could not be read back: $e');
