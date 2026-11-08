@@ -140,6 +140,14 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/cutlab/pubspec.yaml') }}
           restore-keys: gradle-${{ runner.os }}-
+      - name: Download Gradle (retries; github.com downloads sometimes fail with 5xx)
+        working-directory: apps/cutlab/android
+        run: |
+          for attempt in 1 2 3 4 5; do
+            ./gradlew --version && break
+            [ $attempt -lt 5 ] || exit 1
+            echo "Gradle download failed (attempt $attempt), retrying in 30 s"; sleep 30
+          done
       - name: Run on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:

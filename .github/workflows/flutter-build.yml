@@ -97,6 +97,7 @@ jobs:
         working-directory: apps/cutlab
         run: |
           flutter pub get
+          for attempt in 1 2 3 4 5; do (cd android && ./gradlew --version) && break; echo "Gradle download failed, retrying"; sleep 30; done
           # Gradle downloads occasionally fail with HTTP 5xx: retry.
           for attempt in 1 2 3; do
             flutter build apk --release --target-platform android-arm64 --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}" && break

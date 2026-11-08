@@ -42,6 +42,8 @@ native() {
 native core ./cutlab_core_tests
 native media CUTLAB_TEST_MEDIA=$D/media ./cutlab_media_tests
 native crash-report ./cutlab_crash_report_tests $D/crash-report-test
+# That test crashes on purpose: drop its tombstones so real ones stand out.
+adb shell 'rm -f /data/tombstones/*' >/dev/null 2>&1 || true
 native stress ./cutlab_stress_preview 4 real/h264_1080p30.mp4 real/h264_1080p60.mp4 real/hevc_1080p60.mp4 real/hevc10_4k30.mp4 \
   real/phone_portrait_1080p60.mp4 real/long_720p30_10min.mp4 real/vfr.mkv real/tone.mp3 real/red.png
 tail -40 "$LOGS/native.txt"
