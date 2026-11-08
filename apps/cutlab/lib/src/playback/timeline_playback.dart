@@ -170,7 +170,7 @@ class TimelinePlayback extends ChangeNotifier {
         // Cannot be opened right now: plays as black/silence.
       }
     }
-    final hardware = settings.value.hardwareDecoding && await _hardwareAllowed(p);
+    final hardware = settings.value.hardwareDecoding && await hardwareDecodingAllowed(p);
     if (gen != _syncGeneration || _disposed) return;
     final plan = buildTimelinePlan(p, uris, hardware: hardware);
     if (plan.text == _planText) return;
@@ -195,7 +195,7 @@ class TimelinePlayback extends ChangeNotifier {
 
   /// Hardware decoding is used only when every kind of video in the
   /// timeline passed its check (on Android, in a separate process).
-  Future<bool> _hardwareAllowed(Project p) async {
+  Future<bool> hardwareDecodingAllowed(Project p) async {
     for (final m in p.media) {
       if (m.kind != MediaKind.video || p.clipsUsingMedia(m.id) == 0) continue;
       final key = hardwareCheckKey(controller.probeInfo(m.id), m);

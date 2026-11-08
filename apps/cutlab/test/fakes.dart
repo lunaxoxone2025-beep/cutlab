@@ -53,6 +53,49 @@ class FakeMediaPlatform implements MediaPlatform {
     savedDocuments.add((suggestedName, text));
     return true;
   }
+
+  // ------------------------------------------------------------ export
+
+  /// What exportTarget answers (null = the user cancelled the save dialog).
+  String? exportPath = '/exports/out.mp4';
+  final List<String> exportNames = [];
+  final List<String> background = [];
+  final List<ExportedFile> opened = [];
+  DeviceCondition condition = DeviceCondition.unknown;
+
+  /// testedEncoders(): null = ask the engine.
+  List<EncoderInfo>? encoderList;
+
+  @override
+  Future<String?> exportTarget(String fileName) async {
+    exportNames.add(fileName);
+    return exportPath;
+  }
+
+  @override
+  Future<ExportedFile> publishExport(String path, String fileName, String mime) async =>
+      ExportedFile(uri: path, location: 'Movies/CUTLAB/$fileName', gallery: true);
+
+  @override
+  Future<bool> openExported(ExportedFile file) async {
+    opened.add(file);
+    return true;
+  }
+
+  @override
+  Future<void> startBackgroundWork(String text) async => background.add('start $text');
+
+  @override
+  Future<void> updateBackgroundWork(String text, double progress) async => background.add('update $text');
+
+  @override
+  Future<void> stopBackgroundWork() async => background.add('stop');
+
+  @override
+  Future<DeviceCondition> deviceCondition() async => condition;
+
+  @override
+  Future<List<EncoderInfo>?> testedEncoders({bool force = false}) async => encoderList;
 }
 
 PickedMedia video(String name, {String? uri, int durationMs = 90000}) => PickedMedia(
@@ -84,6 +127,24 @@ class FakeMediaEngine extends MediaEngine {
   }
 
   int probeCalls = 0;
+
+  List<EncoderInfo> encoderList = const [
+    EncoderInfo(codec: 'h264', name: 'h264_fakehw', hardware: true),
+    EncoderInfo(codec: 'h264', name: 'libopenh264', hardware: false),
+    EncoderInfo(codec: 'hevc', name: 'libkvazaar', hardware: false),
+    EncoderInfo(codec: 'vp9', name: 'libvpx-vp9', hardware: false),
+  ];
+  final List<FakeExport> exports = [];
+
+  @override
+  Future<List<EncoderInfo>> encoders({bool probe = false}) async => encoderList;
+
+  @override
+  ExportJob startExport(String plan, String settings) {
+    final e = FakeExport(plan, settings);
+    exports.add(e);
+    return e;
+  }
 
   @override
   EngineInfo get info => const EngineInfo(available: true, ffmpegVersion: 'fake', hardwareDecoders: ['fakehw']);
@@ -198,6 +259,60 @@ class FakeTimeline implements TimelineRenderer {
   TimelineStats stats() => const TimelineStats(framesShown: 10, decoder: 'fake');
   @override
   Float32List renderAudio(int startTicks, int frames) => Float32List(frames * 2);
+  @override
+  void dispose() => disposed = true;
+}
+
+/// A scripted export job: tests move it along with [advance] / [finish].
+class FakeExport implements ExportJob {
+  FakeExport(this.plan, this.settings);
+
+  final String plan;
+  final String settings;
+  ExportStatus current = const ExportStatus(state: ExportState.rendering, framesTotal: 100, encoder: 'h264_fakehw', hardware: true);
+  bool paused = false;
+  bool cancelled = false;
+  bool disposed = false;
+
+  String setting(String key) =>
+      settings.split('\n').firstWhere((l) => l.startsWith('$key '), orElse: () => '$key ').substring(key.length + 1);
+
+  void advance(int frames, {int etaMs = 5000}) => current = ExportStatus(
+        state: ExportState.rendering,
+        framesDone: frames,
+        framesTotal: current.framesTotal,
+        fps: 120,
+        speed: 2,
+        etaMs: etaMs,
+        bytes: frames * 1000,
+        encoder: current.encoder,
+        hardware: current.hardware,
+        paused: paused,
+      );
+
+  void finish({ExportState state = ExportState.done, String error = '', List<String> warnings = const []}) => current = ExportStatus(
+        state: state,
+        framesDone: state == ExportState.done ? current.framesTotal : current.framesDone,
+        framesTotal: current.framesTotal,
+        bytes: 123456,
+        encoder: current.encoder,
+        hardware: current.hardware,
+        error: error,
+        warnings: warnings,
+      );
+
+  @override
+  ExportStatus status() => current;
+
+  @override
+  void pause(bool p) => paused = p;
+
+  @override
+  void cancel() {
+    cancelled = true;
+    finish(state: ExportState.cancelled);
+  }
+
   @override
   void dispose() => disposed = true;
 }

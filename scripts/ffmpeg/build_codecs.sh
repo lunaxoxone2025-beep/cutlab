@@ -113,11 +113,10 @@ fetch cisco/openh264 "$OPENH264_TAG" openh264
   make -j"$JOBS" "${ARGS[@]}" PREFIX="$PREFIX" CFLAGS_OPT="-O2" libraries
   make "${ARGS[@]}" PREFIX="$PREFIX" install-static
 )
-# The static library needs the C++ runtime.
-if [ "$TARGET" = linux-x64 ]; then
-  sed -i 's/^Libs.private:.*/& -lstdc++ -lm -lpthread/' "$PREFIX/lib/pkgconfig/openh264.pc"
-  grep -q '^Libs.private' "$PREFIX/lib/pkgconfig/openh264.pc" || echo 'Libs.private: -lstdc++ -lm -lpthread' >> "$PREFIX/lib/pkgconfig/openh264.pc"
-fi
+# The static library is C++: it needs the C++ runtime when linked from C.
+if [ "$TARGET" = linux-x64 ]; then CXXRT="-lstdc++ -lm -lpthread"; else CXXRT="-lc++_static -lc++abi -lm"; fi
+PC="$PREFIX/lib/pkgconfig/openh264.pc"
+if grep -q '^Libs.private:' "$PC"; then sed -i "s/^Libs.private:.*/& $CXXRT/" "$PC"; else echo "Libs.private: $CXXRT" >> "$PC"; fi
 
 # --- kvazaar (CMake)
 fetch ultravideo/kvazaar "$KVAZAAR_TAG" kvazaar
@@ -130,6 +129,18 @@ if [ "$TARGET" = linux-x64 ]; then
   fetch AOMediaCodec/SVT-AV1 "$SVTAV1_TAG" svtav1
   cmake_build "$WORK/svtav1" "$WORK/svtav1-build" -DBUILD_APPS=OFF -DBUILD_DEC=OFF -DBUILD_TESTING=OFF -DENABLE_NASM=ON
 fi
+
+# Static linking needs the libraries' own dependencies in their .pc files
+# (FFmpeg's configure links a test program with them).
+for pc in kvazaar vpx SvtAv1Enc opus; do
+  f="$PREFIX/lib/pkgconfig/$pc.pc"
+  [ -f "$f" ] || continue
+  if grep -q '^Libs.private:' "$f"; then
+    grep -q '^Libs.private:.*-lm' "$f" || sed -i 's/^Libs.private:.*/& -lm/' "$f"
+  else
+    echo 'Libs.private: -lm' >> "$f"
+  fi
+done
 
 echo "codec libraries for $TARGET installed in $PREFIX:"
 ls "$PREFIX/lib"/*.a

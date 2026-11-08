@@ -59,6 +59,7 @@ class MainActivity : FlutterActivity() {
     private var nextRequest = 7100
 
     private val hwPrefs by lazy { getSharedPreferences("cutlab_hw", Context.MODE_PRIVATE) }
+    private val exportSupport by lazy { ExportSupport(this, io, hwPrefs) { appVersion() } }
     private val diagPrefs by lazy { getSharedPreferences("cutlab_diag", Context.MODE_PRIVATE) }
 
     /** Crash reports (native, Java) and the Dart error log live here. */
@@ -178,7 +179,7 @@ class MainActivity : FlutterActivity() {
                 val max = call.argument<Int>("maxSize") ?: 256
                 background(result) { thumbnail(uri, kind, max) }
             }
-            else -> result.notImplemented()
+            else -> if (!exportSupport.handle(call, result)) result.notImplemented()
         }
     }
 

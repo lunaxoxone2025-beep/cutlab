@@ -6,9 +6,12 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../editor/editor_controller.dart';
 import '../engine/media_engine.dart';
+import '../export/export_controller.dart';
+import '../export/export_screen.dart';
 import '../format.dart';
 import '../media/desktop_media_platform.dart';
 import '../media/media_platform.dart';
@@ -106,6 +109,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
+  }
+
+  /// Opens the export screen for the project as it is now.
+  Future<void> _export() async {
+    _playback.pause();
+    final ec = ExportController(
+      project: c.project,
+      media: c.media,
+      engine: c.engine,
+      engineUri: _assets.engineUri,
+      isAvailable: c.isAvailable,
+      hardwareDecoding: () async => widget.settings.value.hardwareDecoding && await _playback.hardwareDecodingAllowed(c.project),
+      workDir: getTemporaryDirectory,
+    );
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ExportScreen(controller: ec)));
+    ec.dispose();
   }
 
   Future<void> _rename() async {
@@ -324,6 +343,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   IconButton(
                       key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
                   _SaveButton(state: c.saveState, onSave: _save),
+                  IconButton(
+                    key: const Key('exportButton'),
+                    tooltip: 'Export video',
+                    icon: const Icon(Icons.ios_share),
+                    onPressed: c.project.durationTicks > 0 ? () => unawaited(_export()) : null,
+                  ),
                   if (wide)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),

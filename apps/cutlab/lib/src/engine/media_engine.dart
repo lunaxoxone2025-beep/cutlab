@@ -326,6 +326,115 @@ abstract class TimelineRenderer {
 
 /// Playback of one media file. Frames are pulled by the UI once per screen
 /// refresh with [pollFrame]; decoding and audio run on native threads.
+/// An encoder in this build (cutlab_export_encoders).
+class EncoderInfo {
+  const EncoderInfo({required this.codec, required this.name, required this.hardware, this.usable = true, this.note = ''});
+
+  /// h264 | hevc | vp9 | av1 | mpeg4 | aac | opus
+  final String codec;
+  final String name;
+  final bool hardware;
+
+  /// False: in the build but failed its test on this device.
+  final bool usable;
+  final String note;
+
+  static List<EncoderInfo> listFromJson(Object? json) {
+    if (json is! List) return const [];
+    return [
+      for (final e in json.whereType<Map<String, Object?>>())
+        EncoderInfo(
+          codec: e['codec'] as String? ?? '',
+          name: e['name'] as String? ?? '',
+          hardware: e['hardware'] == true,
+          usable: e['usable'] != false,
+          note: e['note'] as String? ?? '',
+        ),
+    ];
+  }
+}
+
+enum ExportState { preparing, rendering, finishing, done, failed, cancelled }
+
+/// Progress of a running export (cutlab_export_status).
+class ExportStatus {
+  const ExportStatus({
+    this.state = ExportState.preparing,
+    this.paused = false,
+    this.framesDone = 0,
+    this.framesTotal = 0,
+    this.elapsedMs = 0,
+    this.fps = 0,
+    this.speed = 0,
+    this.etaMs = -1,
+    this.bytes = 0,
+    this.encoder = '',
+    this.hardware = false,
+    this.audioEncoder = '',
+    this.restarts = 0,
+    this.decodeErrors = 0,
+    this.error = '',
+    this.warnings = const [],
+  });
+
+  final ExportState state;
+  final bool paused;
+  final int framesDone;
+  final int framesTotal;
+  final int elapsedMs;
+
+  /// Frames encoded per second (recent), and that as a multiple of real time.
+  final double fps;
+  final double speed;
+
+  /// Remaining time, -1 = not known yet.
+  final int etaMs;
+  final int bytes;
+  final String encoder;
+  final bool hardware;
+  final String audioEncoder;
+  final int restarts;
+  final int decodeErrors;
+  final String error;
+  final List<String> warnings;
+
+  double get progress => framesTotal > 0 ? framesDone / framesTotal : 0;
+  bool get finished => state == ExportState.done || state == ExportState.failed || state == ExportState.cancelled;
+
+  static ExportStatus fromJson(Map<String, Object?> j) {
+    int n(String k) => (j[k] as num?)?.toInt() ?? 0;
+    double d(String k) => (j[k] as num?)?.toDouble() ?? 0;
+    return ExportStatus(
+      state: ExportState.values.firstWhere((s) => s.name == j['state'], orElse: () => ExportState.failed),
+      paused: j['paused'] == true,
+      framesDone: n('framesDone'),
+      framesTotal: n('framesTotal'),
+      elapsedMs: n('elapsedMs'),
+      fps: d('fps'),
+      speed: d('speed'),
+      etaMs: (j['etaMs'] as num?)?.toInt() ?? -1,
+      bytes: n('bytes'),
+      encoder: j['encoder'] as String? ?? '',
+      hardware: j['hardware'] == true,
+      audioEncoder: j['audioEncoder'] as String? ?? '',
+      restarts: n('restarts'),
+      decodeErrors: n('decodeErrors'),
+      error: j['error'] as String? ?? '',
+      warnings: [for (final w in (j['warnings'] as List? ?? const [])) '$w'],
+    );
+  }
+}
+
+/// A video export running in the engine (its own thread).
+abstract class ExportJob {
+  ExportStatus status();
+  void pause(bool paused);
+  void cancel();
+
+  /// Cancels if still running and frees the engine side.
+  void dispose();
+}
+
 abstract class PreviewPlayer {
   int get durationTicks;
   int get positionTicks;
@@ -358,6 +467,13 @@ abstract class MediaEngine {
   /// device (tests).
   TimelineRenderer openTimeline({int maxWidth = 1280, int maxHeight = 720, bool nullAudio = false}) =>
       throw MediaEngineException(info.reason ?? 'The media engine is not available.');
+
+  /// Encoders in this build (probe: test-encode with the hardware ones).
+  Future<List<EncoderInfo>> encoders({bool probe = false}) async => const [];
+
+  /// Starts rendering [plan] (docs/PLAYBACK.md + export lines) with
+  /// [settings] (docs/EXPORT.md) in the background.
+  ExportJob startExport(String plan, String settings) => throw MediaEngineException(info.reason ?? 'The media engine is not available.');
 
   /// Completes when no engine call is still reading [engineUri], so the
   /// file descriptor behind it can be closed safely.

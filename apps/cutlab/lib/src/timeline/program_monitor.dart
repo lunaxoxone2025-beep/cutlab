@@ -2,6 +2,7 @@ import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
 import 'package:flutter/material.dart';
 
 import '../editor/editor_controller.dart';
+import '../export/titles.dart';
 import '../format.dart';
 import '../playback/timeline_playback.dart';
 import '../theme.dart';
@@ -39,7 +40,8 @@ class ProgramMonitor extends StatelessWidget {
               child: Center(
                 child: AspectRatio(
                   aspectRatio: s.width / s.height,
-                  child: Container(
+                  child: LayoutBuilder(
+                    builder: (context, box) => Container(
                     color: Colors.black,
                     child: Stack(
                       fit: StackFit.expand,
@@ -49,21 +51,22 @@ class ProgramMonitor extends StatelessWidget {
                           _note(playback.unavailable ?? controller.engine.info.reason ?? 'Playback is not available in this build.'),
                         if (p.durationTicks == 0) _note('Add media to the timeline (＋ on a file in Media)'),
                         if (titles.isNotEmpty)
-                          Align(
-                            alignment: const Alignment(0, 0.8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(CutlabSpacing.sm),
+                          // Sized like the exported video's titles (export/titles.dart).
+                          Padding(
+                            padding: EdgeInsets.all(TitleLook.padding(box.maxHeight)),
+                            child: Align(
+                              alignment: const Alignment(0, TitleLook.alignY),
                               child: Text(
                                 titles.join('\n'),
                                 key: const Key('monitorTitles'),
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, shadows: [Shadow(blurRadius: 6)]),
+                                style: TitleLook.style(box.maxHeight),
                               ),
                             ),
                           ),
                       ],
                     ),
+                  ),
                   ),
                 ),
               ),

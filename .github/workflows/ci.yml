@@ -193,7 +193,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   windows-app:
-    name: Windows app — timeline playback (integration)
+    name: Windows app — timeline playback + export (integration)
     needs: test-media
     runs-on: windows-2022
     steps:
@@ -234,6 +234,8 @@ jobs:
           $env:PATH = "${{ github.workspace }}\build\core\Release;${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
           $env:CUTLAB_TEST_MEDIA = "${{ github.workspace }}\build\test-media"
           flutter test integration_test/timeline_playback_test.dart -d windows --reporter expanded
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter test integration_test/export_test.dart -d windows --reporter expanded
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   dart-packages:

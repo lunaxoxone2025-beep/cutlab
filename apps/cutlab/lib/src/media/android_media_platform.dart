@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:cutlab_project_format/cutlab_project_format.dart';
 import 'package:flutter/services.dart';
+
+import '../engine/media_engine.dart';
 
 import 'media_platform.dart';
 
@@ -68,6 +72,50 @@ class AndroidMediaPlatform implements MediaPlatform {
   @override
   Future<Map<String, Object?>> deviceInfo() async =>
       await _channel.invokeMapMethod<String, Object?>('deviceInfo') ?? const <String, Object?>{};
+
+  @override
+  Future<String?> exportTarget(String fileName) => _channel.invokeMethod<String>('exportTarget', {'name': fileName});
+
+  @override
+  Future<ExportedFile> publishExport(String path, String fileName, String mime) async {
+    final r = await _channel.invokeMapMethod<String, Object?>('publishExport', {'path': path, 'name': fileName, 'mime': mime}) ?? const {};
+    return ExportedFile(uri: r['uri'] as String? ?? path, location: r['location'] as String? ?? path, gallery: r['gallery'] == true);
+  }
+
+  @override
+  Future<bool> openExported(ExportedFile file) async =>
+      await _channel.invokeMethod<bool>('openExported', {'uri': file.uri, 'mime': 'video/*'}) ?? false;
+
+  @override
+  Future<void> startBackgroundWork(String text) => _channel.invokeMethod<bool>('startBackgroundWork', {'text': text});
+
+  @override
+  Future<void> updateBackgroundWork(String text, double progress) =>
+      _channel.invokeMethod<void>('updateBackgroundWork', {'text': text, 'progress': (progress.clamp(0.0, 1.0) * 1000).round()});
+
+  @override
+  Future<void> stopBackgroundWork() => _channel.invokeMethod<void>('stopBackgroundWork');
+
+  @override
+  Future<DeviceCondition> deviceCondition() async {
+    final r = await _channel.invokeMapMethod<String, Object?>('deviceCondition') ?? const {};
+    return DeviceCondition(
+      thermal: (r['thermal'] as num?)?.toInt() ?? -1,
+      battery: (r['battery'] as num?)?.toInt() ?? -1,
+      charging: r['charging'] == true,
+      powerSave: r['powerSave'] == true,
+    );
+  }
+
+  @override
+  Future<List<EncoderInfo>?> testedEncoders({bool force = false}) async {
+    final json = await _channel.invokeMethod<String>('checkEncoders', {'force': force});
+    if (json == null) return null;
+    final decoded = jsonDecode(json);
+    if (decoded is Map && decoded['encoders'] != null) return EncoderInfo.listFromJson(decoded['encoders']);
+    // The test failed or crashed: hardware encoders are not used.
+    return const [];
+  }
 
   /// Converts one map from the channel into a [PickedMedia]. Public for tests.
   static PickedMedia fromChannelMap(Map<Object?, Object?> m) {

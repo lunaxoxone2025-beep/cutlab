@@ -24,6 +24,10 @@ object HwProbeNative {
     /** Runs cutlab_hw_self_test on [uri] ("fd:N" or a path); returns JSON. */
     @JvmStatic
     external fun nativeSelfTest(uri: String): String
+
+    /** Runs cutlab_export_encoders with hardware test encodes; returns JSON. */
+    @JvmStatic
+    external fun nativeEncoderTest(): String
 }
 
 /**
@@ -35,6 +39,7 @@ object HwProbeNative {
 class HwProbeService : Service() {
     companion object {
         const val MSG_TEST = 1
+        const val MSG_ENCODERS = 2
         const val KEY_URI = "uri"
         const val KEY_RESULT = "result"
     }
@@ -48,16 +53,21 @@ class HwProbeService : Service() {
     override fun onBind(intent: Intent): IBinder = messenger.binder
 
     private fun handle(msg: Message) {
-        if (msg.what != MSG_TEST) return
+        if (msg.what != MSG_TEST && msg.what != MSG_ENCODERS) return
+        val what = msg.what
         val reply = msg.replyTo ?: return
-        val uri = msg.data?.getString(KEY_URI) ?: return
+        val uri = msg.data?.getString(KEY_URI) ?: ""
         worker.execute {
             val json = try {
-                runTest(uri)
+                if (what == MSG_ENCODERS) {
+                    if (HwProbeNative.loaded) HwProbeNative.nativeEncoderTest() else "{\"error\":\"media engine not available\"}"
+                } else {
+                    runTest(uri)
+                }
             } catch (e: Throwable) {
                 "{\"ok\":false,\"error\":" + jsonString(e.toString()) + "}"
             }
-            val out = Message.obtain(null, MSG_TEST)
+            val out = Message.obtain(null, what)
             out.data = Bundle().apply { putString(KEY_RESULT, json) }
             try {
                 reply.send(out)

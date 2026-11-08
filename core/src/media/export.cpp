@@ -630,12 +630,27 @@ void Exporter::work() {
   const ExportSettings& s = settings_;
   try {
     // Encoder order: the one asked for, else hardware (when allowed) then software.
+    // Encoder order: the list asked for ("encoder a,b,c": the app passes the
+    // ones that passed its test, hardware first), else every one in the
+    // build, hardware (when allowed) before software.
     std::vector<EncoderInfo> order;
-    for (const auto& e : available_encoders(false)) {
-      if (e.codec != s.video_codec) continue;
-      if (!s.encoder.empty() && e.name != s.encoder) continue;
-      if (e.hardware && !s.hardware) continue;
-      order.push_back(e);
+    const auto all = available_encoders(false);
+    if (!s.encoder.empty()) {
+      std::istringstream names(s.encoder);
+      std::string name;
+      while (std::getline(names, name, ',')) {
+        for (const auto& e : all) {
+          const bool hw_variant = e.hardware;
+          if (e.name != name || e.codec != s.video_codec || (hw_variant && !s.hardware)) continue;
+          if (std::none_of(order.begin(), order.end(), [&](const EncoderInfo& o) { return o.name == e.name && o.hardware == e.hardware; })) {
+            order.push_back(e);
+          }
+        }
+      }
+    } else {
+      for (const auto& e : all) {
+        if (e.codec == s.video_codec && (!e.hardware || s.hardware)) order.push_back(e);
+      }
     }
     if (order.empty()) {
       throw MediaError(s.encoder.empty() ? "no " + s.video_codec + " encoder in this build" : s.encoder + " is not available");
@@ -663,9 +678,12 @@ void Exporter::work() {
         if (!run.part.empty()) remove_file(run.part);
         const bool more = i + 1 < order.size();
         diag::note("export with %s failed: %s%s", order[i].name.c_str(), e.what(), more ? " (trying the next encoder)" : "");
-        if (!more || !order[i].hardware) throw;
+        // Any encoder that fails (a GPU or a Windows codec pack that is not
+        // there) hands over to the next one; the export restarts cleanly.
+        if (!more) throw;
+        auto label = [](const EncoderInfo& x) { return x.name + (x.hardware ? " (hardware)" : " (software)"); };
         std::lock_guard<std::mutex> lock(mu_);
-        warnings_.push_back(order[i].name + " failed (" + last_error + "); restarted with " + order[i + 1].name);
+        warnings_.push_back(label(order[i]) + " failed (" + last_error + "); restarted with " + label(order[i + 1]));
         ++restarts_;
       }
     }

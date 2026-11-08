@@ -5,7 +5,9 @@
 
 - minSdk 24 (the media engine needs Android 7.0+).
 - Declares HwProbeService in its own process (":hwprobe"), where hardware
-  video decoders are tried before the editor uses them.
+  video decoders and encoders are tried before the editor uses them.
+- Declares ExportService (foreground service that keeps an export running
+  in the background) with its permissions.
 Idempotent: safe to run more than once.
 """
 import pathlib
@@ -34,3 +36,20 @@ if "HwProbeService" not in xml:
         sys.exit("could not add HwProbeService to " + str(manifest))
     manifest.write_text(xml)
 print("manifest: HwProbeService declared")
+
+xml = manifest.read_text()
+if "ExportService" not in xml:
+    service = (
+        '        <service android:name=".ExportService" android:exported="false" '
+        'android:foregroundServiceType="dataSync" />\n'
+    )
+    xml = xml.replace("    </application>", service + "    </application>", 1)
+    perms = "".join(
+        f'    <uses-permission android:name="android.permission.{p}" />\n'
+        for p in ("FOREGROUND_SERVICE", "FOREGROUND_SERVICE_DATA_SYNC", "WAKE_LOCK", "POST_NOTIFICATIONS")
+    )
+    xml = re.sub(r"(<manifest[^>]*>\n)", lambda m: m.group(1) + perms, xml, count=1)
+    if "ExportService" not in xml or "WAKE_LOCK" not in xml:
+        sys.exit("could not add ExportService to " + str(manifest))
+    manifest.write_text(xml)
+print("manifest: ExportService and permissions declared")

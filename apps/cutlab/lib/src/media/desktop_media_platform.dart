@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cutlab_project_format/cutlab_project_format.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../engine/media_engine.dart';
 import 'media_platform.dart';
 
 /// Windows / Linux / macOS implementation: native file dialogs and plain
@@ -103,6 +104,57 @@ class DesktopMediaPlatform implements MediaPlatform {
 
   @override
   Future<void> resetHardwareChecks() async {}
+
+  @override
+  Future<String?> exportTarget(String fileName) async {
+    final dot = fileName.lastIndexOf('.');
+    final ext = dot < 0 ? 'mp4' : fileName.substring(dot + 1);
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export video',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: [ext],
+      lockParentWindow: true,
+    );
+    if (path == null) return null;
+    return path.toLowerCase().endsWith('.$ext') ? path : '$path.$ext';
+  }
+
+  @override
+  Future<ExportedFile> publishExport(String path, String fileName, String mime) async => ExportedFile(uri: path, location: path);
+
+  @override
+  Future<bool> openExported(ExportedFile file) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.start('explorer.exe', ['/select,', file.uri]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', ['-R', file.uri]);
+      } else {
+        await Process.start('xdg-open', [File(file.uri).parent.path]);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> startBackgroundWork(String text) async {}
+
+  @override
+  Future<void> updateBackgroundWork(String text, double progress) async {}
+
+  @override
+  Future<void> stopBackgroundWork() async {}
+
+  @override
+  Future<DeviceCondition> deviceCondition() async => DeviceCondition.unknown;
+
+  // The engine tests GPU encoders itself (NVENC, Quick Sync, AMF, Media
+  // Foundation) and falls back to software when one fails.
+  @override
+  Future<List<EncoderInfo>?> testedEncoders({bool force = false}) async => null;
 
   @override
   Future<Map<String, Object?>> deviceInfo() async => {

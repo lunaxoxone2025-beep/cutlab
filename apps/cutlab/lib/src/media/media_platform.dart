@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:cutlab_project_format/cutlab_project_format.dart';
 
+import '../engine/media_engine.dart';
+
 /// A file chosen by the user, with whatever metadata the platform could read.
 class PickedMedia {
   const PickedMedia({
@@ -93,6 +95,67 @@ abstract class MediaPlatform {
   /// Device, memory, video decoders, earlier crashes/exits and the folder
   /// for crash reports, for the diagnostics screen.
   Future<Map<String, Object?>> deviceInfo();
+
+  // ------------------------------------------------------------ export
+
+  /// Where to render an exported video named [fileName]. Android: a file in
+  /// the app's own folder (moved to the gallery by [publishExport]). PC: the
+  /// user chooses the place; null when cancelled.
+  Future<String?> exportTarget(String fileName);
+
+  /// Makes a finished export available to the user (Android: Movies/CUTLAB
+  /// in the gallery) and says where it is.
+  Future<ExportedFile> publishExport(String path, String fileName, String mime);
+
+  /// Opens the exported video (Android: a video player; PC: its folder).
+  Future<bool> openExported(ExportedFile file);
+
+  /// Keeps the app working while it is in the background (Android: a
+  /// foreground service with a progress notification and a wake lock).
+  Future<void> startBackgroundWork(String text);
+  Future<void> updateBackgroundWork(String text, double progress);
+  Future<void> stopBackgroundWork();
+
+  /// Temperature and battery state (Android); unknown elsewhere.
+  Future<DeviceCondition> deviceCondition();
+
+  /// The encoder list with the hardware encoders test-encoded where that is
+  /// safe (Android: in the separate test process, cached per app version).
+  /// Null: ask the engine directly (PC).
+  Future<List<EncoderInfo>?> testedEncoders({bool force = false});
+}
+
+/// A finished export where the user can find it.
+class ExportedFile {
+  const ExportedFile({required this.uri, required this.location, this.gallery = false});
+
+  /// What [MediaPlatform.openForEngine] and [MediaPlatform.openExported] take.
+  final String uri;
+
+  /// Shown to the user ("Movies/CUTLAB/My video.mp4" or a path).
+  final String location;
+
+  /// In the phone's gallery.
+  final bool gallery;
+}
+
+/// Device state that matters for long exports.
+class DeviceCondition {
+  const DeviceCondition({this.thermal = -1, this.battery = -1, this.charging = false, this.powerSave = false});
+
+  /// Android thermal status: 0 none … 3 severe, 4 critical, 5 emergency; -1 unknown.
+  final int thermal;
+
+  /// Battery percentage, -1 unknown.
+  final int battery;
+  final bool charging;
+  final bool powerSave;
+
+  static const unknown = DeviceCondition();
+
+  bool get hot => thermal >= 3;
+  bool get cooledDown => thermal >= 0 && thermal <= 1;
+  bool get lowBattery => battery >= 0 && battery < 15 && !charging;
 }
 
 /// Result of a hardware decoding check.

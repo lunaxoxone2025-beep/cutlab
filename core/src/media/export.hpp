@@ -30,7 +30,7 @@ struct ExportSettings {
   std::string path;                 // final file; written as path + ".part" and renamed when complete
   std::string container = "mp4";    // mp4 | mov | webm | mkv
   std::string video_codec = "h264"; // h264 | hevc | vp9 | av1 | mpeg4
-  std::string encoder;              // "" = best available; or an FFmpeg encoder name
+  std::string encoder;              // "" = best available; or FFmpeg encoder names, comma-separated, in order
   int width = 1920;
   int height = 1080;
   Rational fps{30, 1};

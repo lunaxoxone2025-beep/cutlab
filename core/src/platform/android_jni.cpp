@@ -40,3 +40,17 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_lunaxoxone_studio_cutlab_HwProbeNa
   env->ReleaseStringUTFChars(juri, uri);
   return env->NewStringUTF(result.c_str());
 }
+
+// HwProbeNative.nativeEncoderTest(): the encoder list with every hardware
+// (MediaCodec) encoder test-encoded, in the ":hwprobe" process.
+extern "C" JNIEXPORT jstring JNICALL Java_com_lunaxoxone_studio_cutlab_HwProbeNative_nativeEncoderTest(JNIEnv* env, jclass /*cls*/) {
+  std::string result;
+  char* json = nullptr;
+  if (cutlab_export_encoders(1, &json) == CUTLAB_OK && json) {
+    result = std::string("{\"encoders\":") + json + "}";
+    cutlab_free(json);
+  } else {
+    result = "{\"error\":\"the encoder test failed\"}";
+  }
+  return env->NewStringUTF(result.c_str());
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -103,6 +104,24 @@ class FfiMediaEngine extends MediaEngine {
   }
 
   @override
+  Future<List<EncoderInfo>> encoders({bool probe = false}) async => EncoderInfo.listFromJson(jsonDecode(await _encodersAsync(probe)));
+
+  @override
+  ExportJob startExport(String plan, String settings) {
+    final p = plan.toNativeUtf8();
+    final s = settings.toNativeUtf8();
+    final out = calloc<Pointer<Void>>();
+    try {
+      if (_b.exportStart(p, s, out) != EngineBindings.statusOk) throw MediaEngineException(_b.lastErrorMessage);
+      return _FfiExport(_b, out.value);
+    } finally {
+      calloc.free(p);
+      calloc.free(s);
+      calloc.free(out);
+    }
+  }
+
+  @override
   void initDiagnostics(String dir, String deviceInfo) {
     final d = dir.toNativeUtf8();
     final i = deviceInfo.toNativeUtf8();
@@ -168,6 +187,19 @@ Future<ThumbnailStrip> _thumbnailsAsync(String uri, int count, int maxW, int max
 Future<Peaks> _peaksAsync(String uri, int bps) => Isolate.run(() => _peaksSync(uri, bps));
 
 Future<int> _openPlayerAsync(String uri, int maxW, int maxH, int flags) => Isolate.run(() => _openPlayerSync(uri, maxW, maxH, flags));
+
+Future<String> _encodersAsync(bool probe) => Isolate.run(() {
+      final b = _bindings();
+      final out = calloc<Pointer<Utf8>>();
+      try {
+        if (b.exportEncoders(probe ? 1 : 0, out) != EngineBindings.statusOk) throw MediaEngineException(b.lastErrorMessage);
+        final s = out.value.toDartString();
+        b.free(out.value.cast());
+        return s;
+      } finally {
+        calloc.free(out);
+      }
+    });
 
 EngineBindings _bindings() {
   final b = EngineBindings.tryLoad();
@@ -466,5 +498,45 @@ class _FfiTimeline implements TimelineRenderer {
     calloc.free(_hh);
     calloc.free(_pts);
     calloc.free(_levels);
+  }
+}
+
+class _FfiExport implements ExportJob {
+  _FfiExport(this._b, this._h);
+
+  final EngineBindings _b;
+  final Pointer<Void> _h;
+  bool _disposed = false;
+  ExportStatus _last = const ExportStatus();
+
+  @override
+  ExportStatus status() {
+    if (_disposed) return _last;
+    final out = calloc<Pointer<Utf8>>();
+    try {
+      if (_b.exportStatus(_h, out) != EngineBindings.statusOk) return _last;
+      final s = out.value.toDartString();
+      _b.free(out.value.cast());
+      return _last = ExportStatus.fromJson(jsonDecode(s) as Map<String, Object?>);
+    } finally {
+      calloc.free(out);
+    }
+  }
+
+  @override
+  void pause(bool paused) {
+    if (!_disposed) _b.exportPause(_h, paused ? 1 : 0);
+  }
+
+  @override
+  void cancel() {
+    if (!_disposed) _b.exportCancel(_h);
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _b.exportClose(_h);
   }
 }
