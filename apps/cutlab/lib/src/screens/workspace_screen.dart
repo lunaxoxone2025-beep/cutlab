@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../editor/editor_controller.dart';
+import '../engine/media_engine.dart';
 import '../format.dart';
 import '../theme.dart';
 import '../storage/app_settings.dart';
@@ -393,12 +394,28 @@ class _MediaPanel extends StatelessWidget {
 }
 
 class _MediaTile extends StatelessWidget {
-  const _MediaTile(
-      {super.key, required this.media, required this.thumbnail, required this.available, required this.onRelink, required this.onRemove});
+  const _MediaTile({
+    super.key,
+    required this.media,
+    required this.thumbnail,
+    required this.available,
+    required this.info,
+    required this.probing,
+    required this.probeError,
+    required this.selected,
+    required this.onSelect,
+    required this.onRelink,
+    required this.onRemove,
+  });
 
   final MediaRef media;
   final Uint8List? thumbnail;
   final bool? available;
+  final ProbeInfo? info;
+  final bool probing;
+  final String? probeError;
+  final bool selected;
+  final VoidCallback onSelect;
   final VoidCallback onRelink;
   final VoidCallback onRemove;
 

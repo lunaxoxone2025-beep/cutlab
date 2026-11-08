@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cutlab/src/editor/editor_controller.dart';
 import 'package:cutlab/src/engine/bmp.dart';
 import 'package:cutlab/src/engine/media_engine.dart';
+import 'package:cutlab/src/media/media_platform.dart';
 import 'package:cutlab/src/storage/project_store.dart';
 import 'package:cutlab/src/storage/store_backend.dart';
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
