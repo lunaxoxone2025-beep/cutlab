@@ -901,8 +901,12 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
     drain(ctx, st);
   };
   // End of stream: every packet the encoder still holds, until it says EOF.
-  auto finish_encoder = [&](AVCodecContext* ctx, AVStream* st) {
+  // Software encoders hand everything over synchronously after the flush
+  // (asking SVT-AV1 again after that can block for ever); asynchronous
+  // hardware encoders may still say "not yet" and are waited for.
+  auto finish_encoder = [&](AVCodecContext* ctx, AVStream* st, bool asynchronous) {
     send(ctx, st, nullptr);
+    if (!asynchronous) return;
     auto since = Clock::now();
     for (;;) {
       const int r = avcodec_receive_packet(ctx, pkt.get());
@@ -1183,8 +1187,8 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   // ---- finish: flush encoders, write the index, rename.
   set_state(State::finishing);
   encode_audio_until(total_samples, true);
-  if (run.aenc) finish_encoder(run.aenc.get(), run.ast);
-  finish_encoder(venc, run.vst);
+  if (run.aenc) finish_encoder(run.aenc.get(), run.ast, false);
+  finish_encoder(venc, run.vst, enc_info.hardware);
   for (auto& v : videos) decode_errors_seen += v.second.dec ? v.second.dec->decode_errors() : 0;
   check(av_write_trailer(run.fmt), "finishing the output file");
   {
