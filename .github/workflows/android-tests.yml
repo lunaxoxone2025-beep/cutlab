@@ -7,7 +7,7 @@ name: Android tests
 # rendering) on real-size H.264/HEVC/4K/portrait/long/broken files.
 #
 # Emulators cannot run the arm64 APK and use Google's software MediaCodec
-# codecs instead of a phone's vendor decoders; see docs/ANDROID_TESTING.md.
+# codecs instead of a phone's vendor decoders; see docs/ANDROID_PREVIEW_CRASH.md.
 on:
   push:
     branches: [main]

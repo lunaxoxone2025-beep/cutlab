@@ -1,5 +1,14 @@
 # Changelog
 
+## CUTLAB dev 0.4.1 — Android preview crash fix (2026-11-08)
+
+- Fixed the likely cause of the app closing when previewing: decoder memory. Decoder threads now depend on the video size, timeline frames and thumbnails share a memory budget, and the preview queue is limited. A 4K HEVC 10-bit phone video in the editor used up to ~1.6 GB with 8 cores; it now uses ~0.55 GB.
+- Hardware video decoding on Android is first tested in a separate process for each kind of video; a decoder that crashes or fails there is not used (software decoding instead).
+- Decoding errors no longer end the app: they stop playback and show a message.
+- The preview opens in the background and closes the file only when nothing still reads it.
+- New: Settings → Diagnostics. Crash reports (native, Java and Android's own records, including out-of-memory kills), device and video decoder list, recent engine activity, copy/save as text. After a crash, CUTLAB says what happened at the next start. If the crash happened during hardware decoding, hardware decoding is turned off.
+- Tests: Android emulator lane (API 28 and 34) running the real app, a preview stress test on real-size H.264/HEVC/4K/portrait/long files, and a crash-report test.
+
 ## CUTLAB dev 0.4 — Phase 4 (2026-11-08)
 
 - Multitrack timeline: video, image, audio and text tracks; add, move, trim, split on the exact frame, delete/ripple delete, duplicate, copy/cut/paste, photo/title duration.

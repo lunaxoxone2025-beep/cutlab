@@ -49,6 +49,13 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ➡️ Continuous playback of the edited timeline with mixed audio, audible volume/fades/mute, title styling → Phase 5; markers UI → Phase 7; track rename/reorder UI → Phase 5 (see `docs/TIMELINE.md`)
 - ⚠️ Not yet tried on the owner's phone/PC
 
+### 0.4.1 — Android preview crash (fixed before Phase 5)
+
+- ✅ Investigation and fixes: decoder memory (main suspect), isolated hardware decoder test, exception safety, background open, descriptor lifetime (`docs/ANDROID_PREVIEW_CRASH.md`)
+- ✅ Diagnostics: native/Java crash reports, Android exit records, device and decoder information, engine activity log (Settings → Diagnostics)
+- ✅ Android emulator tests (API 28/34) inside the real app; stress test; crash-report test
+- ⚠️ Not yet confirmed on the owner's phone
+
 ## Phase 5 — Core editing ⬜
 
 Text clips and styling in the preview, audio tracks/fades/volume, transitions, basic effects stack, keyframes with linear/ease/bezier interpolation, crop/resize/rotate/flip/position/opacity.
@@ -75,5 +82,5 @@ Final testing on the owner's phone and PC, documentation, stable APK and Windows
 
 ## Exact next step
 
-1. **Owner device check** of the `dev` build: edit a long recording on the phone and on the PC (add, split, trim, move, undo, save, reopen).
+1. **Owner device check** of the `dev` build 0.4.1: preview the videos that crashed before, on the phone. If CUTLAB still closes, reopen it and save the report from Settings → Diagnostics.
 2. **Phase 5, item 1:** native timeline renderer — continuous playback of the edited timeline with all audio tracks mixed (volume, fades, mute audible).

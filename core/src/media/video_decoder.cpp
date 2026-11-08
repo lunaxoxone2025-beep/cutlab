@@ -43,9 +43,10 @@ void fit_within(int w, int h, int max_w, int max_h, int& out_w, int& out_h) {
 }
 
 // One-shot decoders (timeline frames, thumbnails) share a pixel budget so
-// several big decodes cannot pile up at once: two 4K pictures, or eight
+// several big decodes cannot pile up at once: one 4K picture, or four
 // 1080p ones, may be decoding at the same time; the rest wait their turn.
-constexpr int64_t kOneShotBudget = 2LL * 3840 * 2160;
+// (A 4K 10-bit HEVC decoder holds ~200 MB of reference pictures.)
+constexpr int64_t kOneShotBudget = 3840LL * 2160;
 std::mutex g_budget_mu;
 std::condition_variable g_budget_cv;
 int64_t g_budget_used = 0;

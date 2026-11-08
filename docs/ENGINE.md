@@ -18,7 +18,7 @@ Media is opened by path (PC) or by file descriptor `fd:<n>` (Android `content://
 
 ```
             ┌───────────── Player ─────────────┐
- file ──►   │ video thread: VideoDecoder ──► queue (8 frames, RGBA, preview size)
+ file ──►   │ video thread: VideoDecoder ──► queue (≤ 8 frames and ≤ 48 MB, RGBA, preview size)
  (path/fd)  │ audio thread: AudioDecoder ──► ring (0.5 s, float 48 kHz stereo) ──► miniaudio device
             │ clock = samples the device consumed − device latency            │
             └──── frame(serial) → UI picks the frame whose pts ≤ clock ───────┘
@@ -29,10 +29,13 @@ Media is opened by path (PC) or by file descriptor `fd:<n>` (Android `content://
 - **Fast seek** (scrubbing): keyframe only. While dragging the UI sends fast seeks, the final position is accurate. The video thread always works on the latest request; stale work is discarded via a generation counter.
 - **Audio** is resampled to 48 kHz float. After a seek the first sample is exactly at t (silence is inserted or samples dropped). Gaps/overlaps > 40 ms in the source are corrected, so long recordings with timestamp hiccups stay in sync.
 - **A/V sync**: the clock advances only by samples actually played (minus the device buffer latency), interpolated between callbacks. If decoding falls behind, the audio underruns and the clock — and so the video — waits. Video-only files use a steady clock.
-- **Memory** is bounded by design: 8 preview frames (≈ 3.7 MB each at 1280×720) + 0.5 s of audio + FFmpeg's own buffers, regardless of file length. No file is read whole.
+- **Memory** is bounded by design and does not depend on the file length (no file is read whole). The preview queue holds at most 8 frames and 48 MB, plus 0.5 s of audio.
+- **Decoder threads** depend on the picture size, because each frame thread keeps one decoded picture in flight (a 4K 10-bit picture is ~25 MB): the player uses up to 6 threads, 4 above 1080p and 3 for 4K. Single-frame decoders (timeline monitor, thumbnails, hardware test) use 2 slice threads and share a budget of one 4K picture (or four 1080p) decoding at a time; further requests wait. Editor-like load, 8 CPUs: 4K HEVC 10-bit 1642 → 544 MB, 1080p60 528 → 193 MB (see `docs/ANDROID_PREVIEW_CRASH.md`).
+- **Errors never end the app**: every exception on the decoder threads and every player call through the C API is caught. The player stops at a broken stream and reports the error (`error` in the stats), and the viewer shows it.
+- **Diagnostics** (`core/src/diag`): a log of the last 64 engine events (decoders opened with codec, size, threads, hardware/software and memory; fallbacks; FFmpeg warnings and errors). It also contains a crash handler for SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT and SIGTRAP (Windows: unhandled exceptions and abort). The handler writes `native-crash.txt` and then passes the signal on to the system's own handler. C API: `cutlab_diag_init`, `cutlab_diag_note`, `cutlab_diag_recent`.
 - **Colour**: BT.601/709/2020 matrices and full/limited range from the stream tags (untagged ≥ 720p is treated as BT.709). 10-bit sources are converted to 8-bit RGBA for preview.
 - **Rotation**: phone videos with a rotation flag are turned upright (clockwise degrees, FFmpeg's convention).
-- **Hardware decoding**: Windows tries D3D11VA then DXVA2; Linux VAAPI when FFmpeg has it (our minimal Linux build does not); Android uses FFmpeg's MediaCodec decoders (`h264_mediacodec`, `hevc_mediacodec`, `vp9_mediacodec`, `av1_mediacodec`), enabled by `JNI_OnLoad` when `MainActivity` loads the library. Any failure — opening or mid-stream — falls back to software decoding automatically. Thumbnails always use software (keyframes only, faster than starting a hardware session).
+- **Hardware decoding**: Windows tries D3D11VA then DXVA2; Linux VAAPI when FFmpeg has it (our minimal Linux build does not); Android uses FFmpeg's MediaCodec decoders (`h264_mediacodec`, `hevc_mediacodec`, `vp9_mediacodec`, `av1_mediacodec`), enabled by `JNI_OnLoad` when `MainActivity` loads the library. Any failure — opening or mid-stream — falls back to software decoding automatically, and the reason is reported (`hardwareFallback`). On Android, a vendor decoder can also *crash* the process. That cannot be caught in-process, so each kind of video is first decoded by `cutlab_hw_self_test` in a separate `:hwprobe` process (`HwProbeService`). A crash, hang or failure there means software decoding for that kind of video. Thumbnails and timeline frames always use software (faster than starting a hardware session).
 
 ## Measured (Linux CI runner / dev container, software decoding)
 
@@ -55,7 +58,7 @@ Real gameplay files are heavier per frame than these synthetic ones; device timi
 
 ## Limitations (known, documented)
 
-1. **Not tested on real devices yet.** Hardware decoding (MediaCodec, D3D11VA) compiles and has an automatic software fallback, but CI machines have no video hardware: it has only been exercised through the fallback path.
+1. **Not tested on real devices yet.** On Android emulators (API 34), MediaCodec decoding through FFmpeg is exercised with Google's software codecs; on API 28 it falls back to software. Phone vendor decoders and D3D11VA on a real GPU have not been run.
 2. **Preview frames go through the CPU**: decoded RGBA is copied to Dart and uploaded as an image each frame. Fine at 540p/720p; 1080p at 60 fps may drop frames on mid-range phones. GPU texture sharing (Flutter `Texture`) is planned for Phase 9. The player's `framesDropped` statistic shows when this happens.
 3. **120 fps playback** displays at the screen refresh rate (usually 60 Hz on phones/PCs): frames are decoded and timed at 120 fps but every other one is skipped on a 60 Hz screen. Frame stepping and frame-accurate seeking work at the full 120 fps.
 4. **AV1 software decoding is not included** (it needs libdav1d). AV1 plays only where the Android device has a hardware AV1 decoder, and on Windows if the BtbN FFmpeg build includes dav1d.
