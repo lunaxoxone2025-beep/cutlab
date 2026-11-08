@@ -190,3 +190,5 @@ scope for this personal project.
 | Software AV1 on phones | Not included (minutes per second of video); AV1 on Android needs a hardware encoder. |
 | Faststart | MP4/MOV files are rewritten at the end so they start playing at once; for very long exports this "Finishing" step takes a while. |
 | Android 7–9 | The video stays in the app's folder instead of the gallery. |
+| WebM/Opus and old players | Ubuntu's FFmpeg 6.1 rejects one Opus packet in WebM exports (written by libopus 1.5); FFmpeg 8.1 and CUTLAB read them correctly. Players built on old FFmpeg versions may complain; MP4 with AAC (the default) is not affected. |
+| AV1 import (Linux, emulator builds) | These engine builds have no AV1 decoder, so AV1 files cannot be previewed there (exports are checked with ffprobe instead). |
