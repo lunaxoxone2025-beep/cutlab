@@ -144,6 +144,26 @@ TlPlan TlPlan::parse(const std::string& text) {
       }
       plan.duration = std::max(plan.duration, clip.end());
       track->clips.push_back(std::move(clip));
+    } else if (kw == "duration") {
+      // Export: the project length (titles may end after the last clip).
+      plan.duration = std::max(plan.duration, std::max<Ticks>(0, to_int(rest, n)));
+    } else if (kw == "overlay") {
+      std::string path;
+      const auto o = split_fields(line, 7, &path);
+      if (o.size() != 7 || path.empty()) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": overlay needs 7 fields");
+      TlOverlay ov;
+      ov.start = to_int(o[1], n);
+      ov.duration = to_int(o[2], n);
+      ov.x = static_cast<int>(to_int(o[3], n));
+      ov.y = static_cast<int>(to_int(o[4], n));
+      ov.w = static_cast<int>(to_int(o[5], n));
+      ov.h = static_cast<int>(to_int(o[6], n));
+      ov.path = path;
+      if (ov.start < 0 || ov.duration <= 0 || ov.w <= 0 || ov.h <= 0 || ov.w > 16384 || ov.h > 16384) {
+        throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": bad overlay");
+      }
+      plan.duration = std::max(plan.duration, ov.end());
+      plan.overlays.push_back(std::move(ov));
     } else {
       throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": unknown entry '" + kw + "'");
     }

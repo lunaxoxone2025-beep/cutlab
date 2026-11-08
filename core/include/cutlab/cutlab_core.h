@@ -160,6 +160,32 @@ CUTLAB_API cutlab_status cutlab_timeline_stats(cutlab_timeline* t, char** out_js
 CUTLAB_API cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_ticks, int32_t frames, float* out, float* peaks,
                                                       int32_t peaks_capacity);
 
+/* ----------------------------------------------------------------- export
+ *
+ * Renders a timeline plan (the playback plan plus "duration" and title
+ * "overlay" lines) to a video file in a background thread. settings is
+ * "key value" lines: path, container, video, encoder, size, fps, quality,
+ * bitrate, speed, hardware, keyframes, audio, audio_bitrate, threads
+ * (docs/EXPORT.md). The file is written as <path>.part and renamed when
+ * complete; a cancelled or failed export leaves nothing behind.
+ */
+typedef struct cutlab_export cutlab_export;
+
+CUTLAB_API cutlab_status cutlab_export_start(const char* plan, const char* settings, cutlab_export** out);
+CUTLAB_API void cutlab_export_pause(cutlab_export* e, int32_t paused);
+CUTLAB_API void cutlab_export_cancel(cutlab_export* e);
+/* JSON: state (preparing|rendering|finishing|done|failed|cancelled), paused,
+ * framesDone, framesTotal, progress, elapsedMs, fps, speed, etaMs, bytes,
+ * encoder, hardware, audioEncoder, restarts, decodeErrors, error, warnings. */
+CUTLAB_API cutlab_status cutlab_export_status(cutlab_export* e, char** out_json);
+/* Cancels if still running, waits for the worker and frees. */
+CUTLAB_API void cutlab_export_close(cutlab_export* e);
+
+/* Encoders in this build, best first per codec, as a JSON array of
+ * {codec, name, hardware, usable, note}. probe != 0 test-encodes with every
+ * hardware encoder (on Android, run it in the separate test process). */
+CUTLAB_API cutlab_status cutlab_export_encoders(int32_t probe, char** out_json);
+
 /* ------------------------------------------------------------ diagnostics */
 
 /* Tries hardware decoding of a file (decodes ~50 frames with seeks).

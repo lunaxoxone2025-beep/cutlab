@@ -50,12 +50,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/ffmpeg-android
-          key: ffmpeg-android-arm64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
-      - name: Build FFmpeg for Android (static, LGPL, MediaCodec)
+          key: ffmpeg-codecs-android-arm64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh', 'scripts/ffmpeg/build_codecs.sh') }}
+      - name: Build encoder libraries + FFmpeg for Android (static, LGPL, MediaCodec)
         if: steps.ffcache.outputs.cache-hit != 'true'
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.home }}
-        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-arm64 build/ffmpeg-android
+        run: |
+          sudo apt-get update && sudo apt-get install -y nasm ninja-build
+          WORK=$PWD/build/codecs scripts/ffmpeg/build_codecs.sh android-arm64 build/ffmpeg-android
+          CODECS_PREFIX=$PWD/build/ffmpeg-android WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-arm64 build/ffmpeg-android
       - name: Build media engine (libcutlab_core.so)
         run: |
           NDK="${{ steps.ndk.outputs.home }}"
@@ -178,10 +181,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/ffmpeg-linux
-          key: ffmpeg-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
-      - name: Build FFmpeg (static, LGPL)
+          key: ffmpeg-codecs-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh', 'scripts/ffmpeg/build_codecs.sh') }}
+      - name: Build encoder libraries + FFmpeg (static, LGPL)
         if: steps.ffcache.outputs.cache-hit != 'true'
-        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
+        run: |
+          WORK=$PWD/build/codecs scripts/ffmpeg/build_codecs.sh linux-x64 build/ffmpeg-linux
+          CODECS_PREFIX=$PWD/build/ffmpeg-linux WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
       - name: Build media engine
         run: |
           cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux -DCUTLAB_BUILD_TESTS=OFF

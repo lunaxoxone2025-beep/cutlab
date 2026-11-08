@@ -42,6 +42,12 @@ int32_t cutlab_timeline_frame(cutlab_timeline*, uint64_t*, uint8_t*, int64_t, in
 int32_t cutlab_timeline_levels(cutlab_timeline*, float*, int32_t) { return 0; }
 cutlab_status cutlab_timeline_stats(cutlab_timeline*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
 cutlab_status cutlab_timeline_render_audio(cutlab_timeline*, int64_t, int32_t, float*, float*, int32_t) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_export_start(const char*, const char*, cutlab_export**) { return CUTLAB_ERR_UNAVAILABLE; }
+void cutlab_export_pause(cutlab_export*, int32_t) {}
+void cutlab_export_cancel(cutlab_export*) {}
+cutlab_status cutlab_export_status(cutlab_export*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+void cutlab_export_close(cutlab_export*) {}
+cutlab_status cutlab_export_encoders(int32_t, char**) { return CUTLAB_ERR_UNAVAILABLE; }
 cutlab_status cutlab_diag_init(const char*, const char*) { return CUTLAB_ERR_UNAVAILABLE; }
 void cutlab_diag_note(const char*) {}
 cutlab_status cutlab_diag_recent(char**) { return CUTLAB_ERR_UNAVAILABLE; }

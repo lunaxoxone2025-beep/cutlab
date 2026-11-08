@@ -7,6 +7,7 @@
 
 #include "../diag/diag.hpp"
 #include "audio_decoder.hpp"
+#include "export.hpp"
 #include "cutlab/cutlab_core.h"
 #include "json.hpp"
 #include "player.hpp"
@@ -116,6 +117,11 @@ struct cutlab_timeline {
   std::mutex offline_mu;
   Mixer offline;  // render_audio(): independent of playback
   explicit cutlab_timeline(TimelineOptions o) : player(o) {}
+};
+
+struct cutlab_export {
+  Exporter exporter;
+  cutlab_export(std::shared_ptr<const TlPlan> plan, ExportSettings s) : exporter(std::move(plan), std::move(s)) {}
 };
 
 struct cutlab_player {
@@ -381,6 +387,47 @@ cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_tic
     if (peaks) {
       for (int32_t i = 0; i < peaks_capacity && i < static_cast<int32_t>(p.size()); ++i) peaks[i] = p[static_cast<size_t>(i)];
     }
+  });
+}
+
+cutlab_status cutlab_export_start(const char* plan, const char* settings, cutlab_export** out) {
+  if (!plan || !settings || !out) return CUTLAB_ERR_INVALID_ARGUMENT;
+  *out = nullptr;
+  return guarded([&] {
+    auto p = std::make_shared<const TlPlan>(TlPlan::parse(plan));
+    ExportSettings s = ExportSettings::parse(settings);
+    *out = new cutlab_export(std::move(p), std::move(s));
+  });
+}
+
+void cutlab_export_pause(cutlab_export* e, int32_t paused) {
+  if (e) safe([&] { e->exporter.pause(paused != 0); return 0; }, 0);
+}
+
+void cutlab_export_cancel(cutlab_export* e) {
+  if (e) safe([&] { e->exporter.cancel(); return 0; }, 0);
+}
+
+cutlab_status cutlab_export_status(cutlab_export* e, char** out_json) {
+  if (!e || !out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    *out_json = dup_string(e->exporter.status_json());
+    if (!*out_json) throw std::bad_alloc();
+  });
+}
+
+void cutlab_export_close(cutlab_export* e) {
+  safe([&] {
+    delete e;
+    return 0;
+  }, 0);
+}
+
+cutlab_status cutlab_export_encoders(int32_t probe, char** out_json) {
+  if (!out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    *out_json = dup_string(encoders_json(available_encoders(probe != 0)));
+    if (!*out_json) throw std::bad_alloc();
   });
 }
 

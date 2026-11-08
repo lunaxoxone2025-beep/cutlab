@@ -42,6 +42,7 @@ if(CUTLAB_WITH_MEDIA)
     src/media/player.cpp
     src/media/audio_output.cpp
     src/media/timeline.cpp
+    src/media/export.cpp
     src/media/miniaudio_impl.c
     src/media/media_capi.cpp
     src/diag/diag.cpp)
@@ -69,6 +70,14 @@ if(CUTLAB_WITH_MEDIA)
     # Static FFmpeg is linked into the engine: one library to ship.
     foreach(lib ${FF_LIBS})
       target_link_libraries(cutlab_core PRIVATE ${CUTLAB_FFMPEG_ROOT}/lib/lib${lib}.a)
+    endforeach()
+    # Encoder libraries from scripts/ffmpeg/build_codecs.sh (installed into
+    # the same prefix), after FFmpeg so its references resolve.
+    foreach(lib openh264 vpx kvazaar SvtAv1Enc opus)
+      if(EXISTS ${CUTLAB_FFMPEG_ROOT}/lib/lib${lib}.a)
+        target_link_libraries(cutlab_core PRIVATE ${CUTLAB_FFMPEG_ROOT}/lib/lib${lib}.a)
+        message(STATUS "encoder library: ${lib}")
+      endif()
     endforeach()
     if(ANDROID)
       target_link_libraries(cutlab_core PRIVATE z m dl log android mediandk)
@@ -128,6 +137,10 @@ if(CUTLAB_BUILD_TESTS)
     target_link_libraries(cutlab_timeline_tests PRIVATE cutlab_core)
     add_test(NAME cutlab_timeline_tests COMMAND cutlab_timeline_tests)
     set_tests_properties(cutlab_timeline_tests PROPERTIES TIMEOUT 900)
+    add_executable(cutlab_export_tests tests/test_export.cpp)
+    target_link_libraries(cutlab_export_tests PRIVATE cutlab_core)
+    add_test(NAME cutlab_export_tests COMMAND cutlab_export_tests)
+    set_tests_properties(cutlab_export_tests PROPERTIES TIMEOUT 1800)
     add_executable(cutlab_bench_timeline tests/bench_timeline.cpp)
     target_link_libraries(cutlab_bench_timeline PRIVATE cutlab_core)
     # Preview stress test (run by hand / in CI on real-size media files).

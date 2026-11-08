@@ -51,13 +51,27 @@ struct TlTrack {
   std::vector<TlClip> clips;  // sorted by start, not overlapping
 };
 
+/// A picture drawn over the video (export only; titles rendered by the app):
+/// straight-alpha RGBA, w × h pixels, at (x, y) of the output frame.
+struct TlOverlay {
+  Ticks start = 0;
+  Ticks duration = 0;
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 0;
+  std::string path;  // raw RGBA bytes (w * h * 4)
+  Ticks end() const { return start + duration; }
+};
+
 /// What to play. Tracks are listed bottom to top: later picture tracks cover
 /// earlier ones (as in the editor).
 struct TlPlan {
   std::vector<TlTrack> tracks;
   float master = 1.0f;
   bool hardware = false;  // hardware video decoding allowed
-  Ticks duration = 0;     // end of the last clip
+  Ticks duration = 0;     // end of the last clip (or overlay, or the "duration" line)
+  std::vector<TlOverlay> overlays;  // export only; playback ignores them
 
   /// Parses the text the app sends (see docs/PLAYBACK.md). Throws
   /// std::invalid_argument with the line number on malformed input.

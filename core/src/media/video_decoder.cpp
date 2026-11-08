@@ -326,7 +326,7 @@ void VideoDecoder::seek(Ticks t, bool accurate) {
 bool VideoDecoder::next(VideoFrame& out) {
   if (still_) {
     // A still image decodes once; every request returns it.
-    if (still_done_ && !out.rgba.empty()) return true;
+    if (still_done_ && (!out.rgba.empty() || out.native)) return true;
     raw_seek(0);
     FramePtr f;
     if (!pull(f)) return false;
@@ -384,6 +384,23 @@ bool VideoDecoder::next(VideoFrame& out) {
 
 void VideoDecoder::convert(const AVFrame* f, VideoFrame& out) {
   const bool side = rotation_ == 90 || rotation_ == 270;
+  if (opts_.native) {
+    AVFrame* copy = av_frame_clone(f);
+    if (!copy) throw MediaError("out of memory (frame)");
+    out.native = std::shared_ptr<const AVFrame>(copy, [](const AVFrame* p) {
+      AVFrame* q = const_cast<AVFrame*>(p);
+      av_frame_free(&q);
+    });
+    out.rotation = rotation_;
+    out.rgba.clear();
+    out.width = side ? f->height : f->width;
+    out.height = side ? f->width : f->height;
+    out.pts = frame_pts(f);
+    out.duration = f->duration > 0 ? pts_to_ticks(f->duration, st_->time_base) : default_frame_duration_;
+    out.keyframe = (f->flags & AV_FRAME_FLAG_KEY) != 0;
+    last_pts_ = out.pts;
+    return;
+  }
   const int disp_w = side ? f->height : f->width;
   const int disp_h = side ? f->width : f->height;
   int out_w = 0, out_h = 0;

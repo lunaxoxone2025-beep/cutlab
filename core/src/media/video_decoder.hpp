@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@ struct DecodeOptions {
   bool keyframes_only = false;  // thumbnails: skip everything but keyframes
   bool one_shot = false;        // a few frames only (timeline frames, thumbnails): slice threads, small memory
   int threads = 0;              // 0 = automatic (by resolution and CPU count)
+  bool native = false;          // export: keep the decoded picture (VideoFrame::native), no RGBA conversion
 };
 
 /// Decoder threads for a stream: frame threads cost one decoded picture
@@ -31,6 +33,10 @@ struct VideoFrame {
   int height = 0;
   bool keyframe = false;
   std::vector<uint8_t> rgba;
+  /// DecodeOptions::native: the decoded picture in its own pixel format
+  /// (software memory), not rotated; width/height are the displayed size.
+  std::shared_ptr<const AVFrame> native;
+  int rotation = 0;  // degrees clockwise to display `native` upright
 };
 
 /// Decodes one video stream. Only the packets needed for the requested

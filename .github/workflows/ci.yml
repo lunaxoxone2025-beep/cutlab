@@ -83,12 +83,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/ffmpeg-linux
-          key: ffmpeg-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
-      - name: Build FFmpeg (static, LGPL)
+          key: ffmpeg-codecs-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh', 'scripts/ffmpeg/build_codecs.sh') }}
+      - name: Build encoder libraries + FFmpeg (static, LGPL)
         if: steps.ffcache.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev
-          WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
+          sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev ninja-build
+          WORK=$PWD/build/codecs scripts/ffmpeg/build_codecs.sh linux-x64 build/ffmpeg-linux
+          CODECS_PREFIX=$PWD/build/ffmpeg-linux WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
       - name: Configure
         run: cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WARNINGS_AS_ERRORS=ON -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
       - name: Build
@@ -96,7 +97,19 @@ jobs:
       - name: Test
         env:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
-        run: ctest --test-dir build/core -C Release --output-on-failure -V
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/export-out
+        run: |
+          mkdir -p "$CUTLAB_TEST_OUT"
+          ctest --test-dir build/core -C Release --output-on-failure -V
+      - name: Export a 2-hour recording
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/export-out
+        run: build/core/cutlab_export_tests --long-only
+      - name: Check every exported file independently (ffprobe, full decode)
+        run: |
+          sudo apt-get install -y ffmpeg
+          python3 scripts/verify_exports.py "${{ runner.temp }}/export-out"
       - id: realmedia
         uses: actions/cache@v4
         with:
@@ -117,13 +130,22 @@ jobs:
           # Without zero-initialised locals, so valgrind still sees mistakes.
           cmake -S core -B build/core-vg -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCUTLAB_ZERO_INIT_LOCALS=OFF -DCUTLAB_WITH_MEDIA=ON \
             -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
-          cmake --build build/core-vg -j 4 --target cutlab_stress_preview cutlab_timeline_tests
+          cmake --build build/core-vg -j 4 --target cutlab_stress_preview cutlab_timeline_tests cutlab_export_tests
           M=build/android-media; T=build/test-media
           VG="valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect"
           $VG build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
           CUTLAB_UNDER_VALGRIND=1 CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
+          mkdir -p "${{ runner.temp }}/vg-out"
+          CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_export_tests --quick
       - name: Timeline benchmark (Linux)
         run: build/core/cutlab_bench_timeline build/test-media build/android-media
+      - name: Export benchmark (Linux, software encoders)
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/bench-out
+        run: |
+          mkdir -p "$CUTLAB_TEST_OUT"
+          build/core/cutlab_export_tests --bench build/android-media 2>/dev/null
 
   core-windows:
     name: C++ core + media engine (Windows x64)
@@ -151,9 +173,17 @@ jobs:
         shell: pwsh
         env:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}\export-out
         run: |
+          New-Item -ItemType Directory -Force -Path $env:CUTLAB_TEST_OUT | Out-Null
           $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
           ctest --test-dir build/core -C Release --output-on-failure -V
+      - name: Check every exported file independently (ffprobe, full decode)
+        shell: pwsh
+        run: |
+          $bin = "${{ github.workspace }}\build\ffmpeg-win64\bin"
+          python scripts/verify_exports.py "${{ runner.temp }}\export-out" "$bin\ffprobe.exe" "$bin\ffmpeg.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preview stress test (players + timeline frames + thumbnails at once)
         shell: pwsh
         run: |

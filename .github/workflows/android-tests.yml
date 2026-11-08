@@ -45,12 +45,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/ffmpeg-android-x86_64
-          key: ffmpeg-android-x86_64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
-      - name: Build FFmpeg for Android x86_64
+          key: ffmpeg-codecs-android-x86_64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh', 'scripts/ffmpeg/build_codecs.sh') }}
+      - name: Build encoder libraries + FFmpeg for Android x86_64
         if: steps.ffcache.outputs.cache-hit != 'true'
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.home }}
-        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-x86_64 build/ffmpeg-android-x86_64
+        run: |
+          sudo apt-get install -y ninja-build
+          WORK=$PWD/build/codecs scripts/ffmpeg/build_codecs.sh android-x86_64 build/ffmpeg-android-x86_64
+          CODECS_PREFIX=$PWD/build/ffmpeg-android-x86_64 WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-x86_64 build/ffmpeg-android-x86_64
       - name: Build engine and native tests
         run: |
           NDK="${{ steps.ndk.outputs.home }}"
@@ -62,7 +65,7 @@ jobs:
           mkdir -p dist/native
           cp build/core-x86_64/libcutlab_core.so build/core-x86_64/cutlab_media_tests build/core-x86_64/cutlab_stress_preview \
             build/core-x86_64/cutlab_core_tests build/core-x86_64/cutlab_crash_report_tests \
-            build/core-x86_64/cutlab_timeline_tests build/core-x86_64/cutlab_bench_timeline dist/native/
+            build/core-x86_64/cutlab_timeline_tests build/core-x86_64/cutlab_bench_timeline build/core-x86_64/cutlab_export_tests dist/native/
       - id: mediacache
         uses: actions/cache@v4
         with:
@@ -162,10 +165,15 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash scripts/android/run_emulator_tests.sh build/native build/media apps/cutlab build/emulator-logs
+      - name: Check the files exported on the emulator independently (ffprobe, full decode)
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          python3 scripts/verify_exports.py build/emulator-logs/exports
       - name: Results
         if: always()
         run: |
-          grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|EXPORT-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          sed -n '/NATIVE-TEST export-bench: start/,/NATIVE-TEST export-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           sed -n '/NATIVE-TEST bench: start/,/NATIVE-TEST bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           echo "--- crashes in logcat ---"
           grep -h -E "F DEBUG|FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|cutlab-crash" build/emulator-logs/logcat.txt 2>/dev/null | head -80 || true
