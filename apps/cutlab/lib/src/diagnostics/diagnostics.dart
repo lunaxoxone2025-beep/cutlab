@@ -228,7 +228,8 @@ class Diagnostics {
       RegExp(r'(content|file)://\S+'),
       RegExp(r'/(storage|sdcard|mnt/media_rw|home|Users)/[^\s"\x27]+'),
       RegExp(r'[A-Za-z]:\\[^\s"\x27]+'),
-      RegExp(r'[^\s"\x27/\\]+\.(mp4|m4v|mov|mkv|webm|avi|3gp|ts|mts|m2ts|flv|wmv|mp3|wav|m4a|aac|flac|ogg|opus|jpg|jpeg|png|webp|heic|gif|cutlab)\b',
+      RegExp(
+          r'[^\s"\x27/\\]+\.(mp4|m4v|mov|mkv|webm|avi|3gp|ts|mts|m2ts|flv|wmv|mp3|wav|m4a|aac|flac|ogg|opus|jpg|jpeg|png|webp|heic|gif|cutlab)\b',
           caseSensitive: false),
     ]) {
       t = t.replaceAll(p, '<file>');

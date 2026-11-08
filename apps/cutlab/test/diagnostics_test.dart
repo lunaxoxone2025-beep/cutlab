@@ -77,8 +77,10 @@ void main() {
 
   test('reports leave out file names and paths', () async {
     final d = make({'platform': 'test'});
-    d.log('dart', 'Cannot play this file: cannot open content://com.android.providers/document/video%3A123 '
-        '(/storage/emulated/0/DCIM/Camera/VID_20261016_203327.mp4, C:\\Users\\Marco\\Videos\\ranked match.mkv)');
+    d.log(
+        'dart',
+        'Cannot play this file: cannot open content://com.android.providers/document/video%3A123 '
+            '(/storage/emulated/0/DCIM/Camera/VID_20261016_203327.mp4, C:\\Users\\Marco\\Videos\\ranked match.mkv)');
     File('${dir.path}${Platform.pathSeparator}engine-activity-previous.log')
         .writeAsStringSync('[ 31.515 t9358] decoder hevc_mediacodec hevc 1280x720 8-bit threads=1 hw=1\npreview open VID_1.mp4\n');
     final report = await d.report();
