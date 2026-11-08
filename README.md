@@ -1,64 +1,43 @@
-# CutLab ✂️ — editor de vídeo estilo CapCut
+# CUTLAB ✂️
 
-Editor de vídeo que funciona en el navegador y se instala como app (PWA) en Android, iPhone y PC.
-Todo se procesa **en tu dispositivo**: tus vídeos nunca se suben a internet.
+A cross-platform video editor for gaming creators and everyday editing — approachable like a mobile editor, with a professional multi-track workspace for long-form projects.
 
-## Funciones
+[![CI](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml)
+[![Flutter builds](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml)
 
-- **Línea de tiempo** con cursor central (como CapCut), zoom con pellizco y tres pistas: texto, vídeo y audio
-- **Importar** vídeos, fotos y música desde la galería
-- **Recortar** con las asas blancas, **dividir**, **duplicar**, **reordenar** (mantén pulsado y arrastra) y **eliminar**
-- **Velocidad** 0.1x – 4x, **volumen** hasta 200 %
-- **10 filtros** + ajustes de brillo, contraste, saturación y desenfoque
-- **8 transiciones**: fundido, a negro, destello, zoom, deslizar, subir, desenfoque
-- **Movimiento Ken Burns** (acercar, alejar, paneo) — ideal para fotos
-- **Encuadre**: ajustar/rellenar, zoom, girar 90°, espejo
-- **Textos** con 8 plantillas, 6 fuentes, contorno, fondo, sombra, brillo neón y animaciones (pop, zoom, máquina de escribir…). Se arrastran y se pellizcan directamente en la vista previa
-- **Música** con fundido de entrada y salida
-- **Formatos** 9:16, 16:9, 1:1, 4:5, 3:4 y fondo desenfocado automático
-- **Deshacer / rehacer** y **guardado automático** del proyecto
-- **Exportar** en 480p, 720p o 1080p a 24/30/60 fps (MP4 o WebM según el navegador) y compartir directamente
-- Funciona **sin conexión** después de la primera visita
+## Two editions
 
-## 📲 Descargar para Android (APK)
+| | **CutLab Lite** (available now) | **CUTLAB** (Flutter + C++, in development) |
+|---|---|---|
+| Where | Android APK · any browser | Android, Windows, Linux, macOS |
+| Status | Usable editor | Phase 1 of 10 complete — foundation only, no media editing yet |
+| Code | `apps/web/` | `apps/cutlab/`, `core/`, `packages/` |
 
-**[⬇️ Descargar CutLab.apk](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk)**
+### 📲 Install CutLab Lite on Android
 
-Ábrelo en el móvil y pulsa **Instalar**. Si Android lo pide, permite *instalar apps de origen desconocido* para tu navegador.
-El APK se construye y se publica automáticamente en **Releases** cada vez que se actualiza el código.
+**[⬇️ Download CutLab.apk](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk)** — open it on your phone and tap **Install** (allow "install unknown apps" for your browser if Android asks).
 
-## Usarlo como web app (GitHub Pages)
+Web version: https://lunaxoxone2025-beep.github.io/cutlab/
 
-1. Entra en GitHub con tu cuenta y crea un repositorio nuevo llamado **`cutlab`** (público).
-2. Pulsa **Add file → Upload files** y sube **todos** los archivos de esta carpeta (están todos en la raíz, sin subcarpetas). Pulsa **Commit changes**.
-3. Ve a **Settings → Pages**. En *Build and deployment* elige **Source: Deploy from a branch**, rama **main** y carpeta **/ (root)**. Pulsa **Save**.
-4. Espera 1–2 minutos y abre:
-   `https://lunaxoxone2025-beep.github.io/cutlab/`
-5. Instala la app:
-   - **Android (Chrome):** botón **Instalar** arriba en la app, o menú ⋮ → *Instalar aplicación*.
-   - **iPhone (Safari):** botón Compartir → *Añadir a pantalla de inicio*.
-   - **PC (Chrome / Edge):** icono de instalar en la barra de direcciones.
+Lite features: timeline with video, text and audio lanes · trim, split, duplicate, reorder · speed 0.1×–4× · 10 filters and colour adjustments · 8 transitions · Ken Burns motion · animated text with templates · music with fades · 9:16 / 16:9 / 1:1 / 4:5 / 3:4 · undo/redo · autosave · export 480p–1080p. Everything runs on your device; videos are never uploaded.
 
-### Con git (alternativa)
+## CUTLAB (new edition)
 
-```bash
-git init
-git add .
-git commit -m "CutLab"
-git branch -M main
-git remote add origin https://github.com/lunaxoxone2025-beep/cutlab.git
-git push -u origin main
-```
+- **Flutter** UI shared by phone, tablet and desktop, with **beginner** and **advanced** modes over the same project data.
+- **C++ core** for decoding, compositing, audio and export, reached through a small C ABI (`dart:ffi`).
+- **Frame-exact time**: every timestamp is an integer (705,600,000 ticks per second).
+- **`.cutlab`** versioned JSON project format; media is referenced, never copied.
 
-Luego activa Pages como en el paso 3.
+Development builds (APK/AAB, Linux, Windows, macOS) are attached to each run of the *Flutter builds* workflow. They currently contain the application shell only.
 
-## Actualizar la app
+## Documentation
 
-Sube los archivos nuevos al repositorio. La app instalada descarga la versión nueva la próxima vez que la abras con conexión.
+- [Architecture and decisions](docs/ARCHITECTURE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Project format](docs/PROJECT_FORMAT.md)
+- [Building](docs/BUILDING.md)
+- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
-## Notas
+## License
 
-- La exportación se graba en **tiempo real** (un vídeo de 30 s tarda unos 30 s). Mantén la pantalla encendida y la app abierta.
-- En Safari (iPhone) los filtros de color pueden no aplicarse; el resto funciona.
-- Los proyectos se guardan en el almacenamiento del navegador. Si borras los datos del sitio, se borra el proyecto.
-- Atajos en PC: `Espacio` reproducir · `S` dividir · `Supr` borrar · `Ctrl+Z` / `Ctrl+Y` deshacer/rehacer · `←` `→` fotograma a fotograma.
+Not yet chosen — see the open decision in `docs/ARCHITECTURE.md` (D8 covers codec licensing). Until a license is added, all rights are reserved by the repository owner.

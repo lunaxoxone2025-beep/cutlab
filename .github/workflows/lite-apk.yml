@@ -1,10 +1,15 @@
-name: Construir APK de Android
+name: CutLab Lite APK
 
-# Cada vez que se sube algo a "main", GitHub construye el APK de CutLab
-# y lo publica en la sección Releases del repositorio.
+# CutLab Lite = the current browser-based editor (apps/web) wrapped with Capacitor.
+# Whenever apps/web changes on main, GitHub builds the APK and publishes it in Releases.
+# It stays the installable app until the Flutter edition reaches feature parity (see docs/ROADMAP.md).
 on:
   push:
     branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'android-signing/**'
+      - '.github/workflows/lite-apk.yml'
   workflow_dispatch:
 
 permissions:
@@ -18,7 +23,8 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.0.${{ github.run_number }}
+      VERSION: 1.1.${{ github.run_number }}
+      VERSION_CODE: ${{ github.run_number }}0
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +40,7 @@ jobs:
       - name: Preparar proyecto Capacitor
         run: |
           mkdir -p build/www
-          cp index.html style.css app.js sw.js manifest.webmanifest icon-*.png build/www/
+          cp apps/web/index.html apps/web/style.css apps/web/app.js apps/web/sw.js apps/web/manifest.webmanifest apps/web/icon-*.png build/www/
           cd build
           npm init -y >/dev/null
           npm install --no-audit --no-fund @capacitor/core@6.1.2 @capacitor/cli@6.1.2 @capacitor/android@6.1.2 @capacitor/filesystem@6.0.1 @capacitor/share@6.0.2
@@ -47,12 +53,12 @@ jobs:
           cd build/android/app/src/main/res
           rm -rf mipmap-anydpi-v26
           for d in mipmap-*; do
-            cp "$GITHUB_WORKSPACE/icon-192.png" "$d/ic_launcher.png"
-            cp "$GITHUB_WORKSPACE/icon-192.png" "$d/ic_launcher_round.png"
+            cp "$GITHUB_WORKSPACE/apps/web/icon-192.png" "$d/ic_launcher.png"
+            cp "$GITHUB_WORKSPACE/apps/web/icon-192.png" "$d/ic_launcher_round.png"
             rm -f "$d/ic_launcher_foreground.png"
           done
           cd "$GITHUB_WORKSPACE/build/android/app"
-          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" build.gradle
+          sed -i "s/versionCode 1$/versionCode $VERSION_CODE/" build.gradle
           sed -i "s/versionName \"1.0\"/versionName \"$VERSION\"/" build.gradle
           mkdir -p ~/.android
           cp "$GITHUB_WORKSPACE/android-signing/cutlab.keystore" ~/.android/debug.keystore
@@ -67,8 +73,8 @@ jobs:
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: CutLab v${{ env.VERSION }}
+          tag_name: lite-v${{ env.VERSION }}
+          name: CutLab Lite v${{ env.VERSION }}
           make_latest: true
           files: CutLab.apk
           body: |

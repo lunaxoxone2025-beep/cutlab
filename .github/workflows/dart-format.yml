@@ -1,0 +1,34 @@
+name: Dart auto-format
+
+# Keeps Dart sources in canonical `dart format` style (line length 140).
+# When a push to main contains unformatted Dart code, this job formats it and
+# commits the result, so the CI "Format check" stays green.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.dart'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      - name: Format
+        run: dart format --line-length 140 packages apps/cutlab/lib apps/cutlab/test
+      - name: Commit if changed
+        run: |
+          if git diff --quiet; then echo "Already formatted."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "style: dart format"
+          git push

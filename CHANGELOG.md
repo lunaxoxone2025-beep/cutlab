@@ -1,0 +1,15 @@
+# Changelog
+
+## Unreleased — Phase 1 (architecture and foundation)
+
+- Repository restructured: CutLab Lite moved to `apps/web/`; root page redirects there.
+- New C++ core (`core/`): exact 64-bit tick time arithmetic, rescaling, frame/timecode conversion, C ABI, unit tests.
+- New Dart package `packages/project_format`: `.cutlab` v1 model, JSON codec, validation with JSON paths, migration chain, tests.
+- New Flutter app foundation (`apps/cutlab`): design tokens, new-project flow, responsive desktop/mobile workspace, beginner/advanced mode switch, widget tests.
+- CI: code quality, C++ on Linux/Windows/macOS, Dart and Flutter analysis/tests, Android/Linux/Windows/macOS builds.
+- Docs: ARCHITECTURE, ROADMAP, PROJECT_FORMAT, BUILDING, CONTRIBUTING.
+
+## CutLab Lite 1.0 — 2026-11-07
+
+- Browser video editor (PWA) with timeline, trim/split, speed, filters, transitions, text, audio and real-time export.
+- Android APK built automatically and published to Releases.

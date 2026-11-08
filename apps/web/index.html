@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CutLab">
+<meta name="description" content="Editor de vídeo estilo CapCut que funciona en tu navegador. Instalable y sin subir nada a internet.">
+<title>CutLab · Editor de vídeo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;800&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@700&family=Space+Mono:wght@700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <div class="brand"><img src="icon-192.png" alt=""><b>CutLab</b></div>
+  <div class="top-actions">
+    <button id="btnInstall" class="pill hidden">Instalar</button>
+    <button id="btnUndo" class="icon" title="Deshacer (Ctrl+Z)" disabled></button>
+    <button id="btnRedo" class="icon" title="Rehacer (Ctrl+Y)" disabled></button>
+    <button id="btnMenu" class="icon" title="Menú"></button>
+    <button id="btnExport" class="primary">Exportar</button>
+  </div>
+</header>
+
+<main id="stage">
+  <canvas id="cv" width="720" height="1280"></canvas>
+  <div id="empty">
+    <div class="empty-card">
+      <button id="emptyAdd" class="big-add" aria-label="Añadir medios"></button>
+      <b>Empieza tu proyecto</b>
+      <span>Añade vídeos o fotos desde tu galería</span>
+    </div>
+  </div>
+</main>
+
+<div id="transport">
+  <span id="tTime">00:00.0 / 00:00.0</span>
+  <button id="btnPlay" class="play" title="Reproducir (Espacio)"></button>
+  <div class="zoom">
+    <button id="zoomOut" class="icon sm" title="Alejar"></button>
+    <button id="zoomIn" class="icon sm" title="Acercar"></button>
+  </div>
+</div>
+
+<section id="tlWrap">
+  <div id="tl">
+    <div id="tlInner">
+      <div id="ruler"></div>
+      <div class="row" id="rowText"></div>
+      <div class="row" id="rowMain"></div>
+      <div class="row" id="rowAudio"></div>
+    </div>
+  </div>
+  <div id="playhead"></div>
+</section>
+
+<nav id="toolbar"></nav>
+
+<div id="scrim" class="hidden"></div>
+<div id="sheet" class="closed" role="dialog">
+  <div class="sheet-head"><b id="sheetTitle"></b><button id="sheetClose" class="icon" title="Listo"></button></div>
+  <div id="sheetBody"></div>
+</div>
+
+<div id="exportOverlay" class="hidden">
+  <div class="exp-card">
+    <div id="expRun">
+      <div class="exp-title">Exportando…</div>
+      <div class="bar"><i id="expBar"></i></div>
+      <div id="expPct">0%</div>
+      <p class="muted">Mantén la pantalla encendida y esta pestaña abierta hasta que termine.</p>
+      <button id="expCancel" class="ghost">Cancelar</button>
+    </div>
+    <div id="expDone" class="hidden">
+      <div class="exp-title">¡Vídeo listo!</div>
+      <video id="expVideo" controls playsinline></video>
+      <div class="exp-actions">
+        <a id="expDownload" class="primary" download>Descargar</a>
+        <button id="expShare" class="ghost hidden">Compartir</button>
+      </div>
+      <button id="expClose" class="ghost">Volver al editor</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="pool" aria-hidden="true"></div>
+<input type="file" id="fileMedia" accept="video/*,image/*" multiple hidden>
+<input type="file" id="fileAudio" accept="audio/*" multiple hidden>
+<script src="app.js"></script>
+</body>
+</html>

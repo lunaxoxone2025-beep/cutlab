@@ -1,0 +1,143 @@
+name: Flutter builds
+
+# Builds the Flutter edition on every platform and uploads the results as
+# workflow artifacts (development builds, not releases).
+#
+# Platform folders (android/, linux/, windows/, macos/) are generated with
+# `flutter create` at build time until Phase 3 adds native code to them;
+# see docs/BUILDING.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/cutlab/**'
+      - 'packages/**'
+      - 'core/**'
+      - '.github/workflows/flutter-build.yml'
+  pull_request:
+    paths:
+      - 'apps/cutlab/**'
+      - 'packages/**'
+      - 'core/**'
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+  # Distinct from CutLab Lite (com.lunaxoxone.cutlab) so both can be installed side by side.
+  FLUTTER_ORG: com.lunaxoxone.studio
+
+jobs:
+  android:
+    name: Android (APK debug + release, AAB)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cutlab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Generate platform folder
+        run: flutter create --platforms=android --org "$FLUTTER_ORG" --project-name cutlab .
+      - run: flutter pub get
+      - name: Build debug APK
+        run: flutter build apk --debug
+      - name: Build release APK and App Bundle (development signing)
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cutlab-android
+          path: |
+            apps/cutlab/build/app/outputs/flutter-apk/app-debug.apk
+            apps/cutlab/build/app/outputs/flutter-apk/app-release.apk
+            apps/cutlab/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cutlab
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=linux --org "$FLUTTER_ORG" --project-name cutlab .
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - name: Package
+        run: tar -C build/linux/x64/release/bundle -czf cutlab-linux-x64.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cutlab-linux-x64
+          path: apps/cutlab/cutlab-linux-x64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/cutlab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=windows --org "${{ env.FLUTTER_ORG }}" --project-name cutlab .
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath cutlab-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cutlab-windows-x64
+          path: apps/cutlab/cutlab-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/cutlab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=macos --org "$FLUTTER_ORG" --project-name cutlab .
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - name: Package
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/cutlab.app cutlab-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cutlab-macos
+          path: apps/cutlab/cutlab-macos.zip
+          if-no-files-found: error

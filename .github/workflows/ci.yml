@@ -1,0 +1,103 @@
+name: CI
+
+# Code quality, analysis and unit tests for every part of the repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+
+jobs:
+  repo-hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No large or generated binaries committed
+        run: |
+          # Fail on any tracked file over 5 MB or on build outputs.
+          big=$(git ls-files -z | xargs -0 -I{} sh -c 'test $(wc -c < "{}") -gt 5242880 && echo "{}"' || true)
+          if [ -n "$big" ]; then echo "Files over 5 MB:"; echo "$big"; exit 1; fi
+          bad=$(git ls-files | grep -E '\.(apk|aab|exe|dmg|AppImage|so|dll|dylib|mp4|mov|mkv)$' || true)
+          if [ -n "$bad" ]; then echo "Generated binaries or media must not be committed:"; echo "$bad"; exit 1; fi
+      - name: Workflow YAML parses
+        run: |
+          for f in .github/workflows/*.yml; do python3 -c "import sys,yaml; yaml.safe_load(open(sys.argv[1]))" "$f" && echo "ok $f"; done
+
+  web-lite:
+    name: CutLab Lite (web) checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: JavaScript syntax
+        run: |
+          node --check apps/web/app.js
+          node --check apps/web/sw.js
+      - name: Manifest and assets
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('apps/web/manifest.webmanifest','utf8')); console.log('manifest ok')"
+          for f in index.html style.css app.js sw.js icon-192.png icon-512.png icon-maskable.png; do test -f "apps/web/$f" || { echo "missing apps/web/$f"; exit 1; }; done
+
+  core-cpp:
+    name: C++ core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build/core --config Release
+      - name: Test
+        run: ctest --test-dir build/core -C Release --output-on-failure
+
+  dart-packages:
+    name: Dart package — project_format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/project_format
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: dart pub get
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed --line-length 140 .
+      - run: dart analyze --fatal-infos
+      - run: dart test
+
+  flutter-app:
+    name: Flutter app — analyze & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cutlab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed --line-length 140 lib test
+      - run: flutter analyze
+      - run: flutter test
