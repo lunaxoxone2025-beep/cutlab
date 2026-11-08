@@ -1,6 +1,6 @@
 # CUTLAB architecture
 
-Status: **Phase 2 (application foundation)** — November 2026. This document records the decisions taken and why; it is updated whenever a decision changes.
+Status: **Phase 3 (media engine)** — November 2026. This document records the decisions taken and why; it is updated whenever a decision changes.
 
 ## 1. Starting point (audit of the repository, Phase 1)
 
@@ -58,9 +58,11 @@ What Lite cannot become, and why a new engine is needed:
 
 **D7 — Beginner and advanced modes are views.** `editorMode` only changes which tools and parameters are shown. Both modes read and write the same model, so switching never loses or simplifies data (enforced by a test in `packages/project_format/test/codec_test.dart`).
 
-**D8 — Codec licensing (decision required before Phase 3 ships binaries).** FFmpeg is used **LGPL-only** (no `--enable-gpl`, no `--enable-nonfree`), dynamically linked. Therefore **no libx264/libx265**. H.264/HEVC encoding uses platform encoders (MediaCodec, Media Foundation, VideoToolbox, VA-API); AV1 via SVT-AV1 (BSD) where hardware is absent; VP9 via libvpx (BSD). A software H.264 fallback (OpenH264, BSD with Cisco binary terms) is an open question. HEVC/H.264 patent licensing is the user's/distributor's responsibility and must be stated in release notes.
+**D8 — Codec licensing.** FFmpeg is used **LGPL-only** (no `--enable-gpl`, no `--enable-nonfree`): statically linked into `cutlab_core` on Android/Linux (minimal decode-only build from source), BtbN's LGPL shared DLLs on Windows. Since CUTLAB is for personal use only (D14) there is no redistribution; the LGPL choice simply keeps that option open. Therefore **no libx264/libx265**. H.264/HEVC encoding uses platform encoders (MediaCodec, Media Foundation, VideoToolbox, VA-API); AV1 via SVT-AV1 (BSD) where hardware is absent; VP9 via libvpx (BSD). A software H.264 fallback (OpenH264, BSD with Cisco binary terms) is an open question. HEVC/H.264 patent licensing is the user's/distributor's responsibility and must be stated in release notes.
 
 **D9 — Proxies for long-form footage.** Media above a resolution/bitrate threshold gets a background-generated proxy (short-GOP H.264 or MJPEG at 540p/720p) in the cache directory. Clips keep pointing at the original `MediaRef`; the renderer substitutes the proxy for preview only, and export always uses originals.
+
+**D16 — FFmpeg 8.1 and miniaudio (Phase 3).** All platforms use FFmpeg 8.1 so the engine code sees one API (prebuilt 7.1 for Windows is no longer published). Audio output uses miniaudio 0.11.21 (public domain / MIT-0), which wraps AAudio/OpenSL ES on Android and WASAPI on Windows behind one API. Details, measurements and limitations: `docs/ENGINE.md`.
 
 **D10 — Rendering behind an interface.** Phase 3 ships a CPU compositor (correctness reference, works everywhere) feeding a Flutter `Texture`. GPU backends (GLES/Vulkan on Android and Linux, D3D11 on Windows, Metal on macOS) arrive in Phase 9 behind the same `RenderBackend` interface, with the CPU path kept as fallback and as the test oracle.
 
