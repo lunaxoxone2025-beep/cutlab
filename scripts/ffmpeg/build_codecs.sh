@@ -145,7 +145,8 @@ cmake_build "$WORK/kvazaar" "$WORK/kvazaar-build" -DBUILD_TESTS=OFF -DBUILD_KVAZ
 # --- SVT-AV1 (software AV1; desktop only: far too slow on phones)
 if [ "$TARGET" = linux-x64 ]; then
   fetch AOMediaCodec/SVT-AV1 "$SVTAV1_TAG" svtav1
-  cmake_build "$WORK/svtav1" "$WORK/svtav1-build" -DBUILD_APPS=OFF -DBUILD_DEC=OFF -DBUILD_TESTING=OFF -DENABLE_NASM=ON
+  cmake_build "$WORK/svtav1" "$WORK/svtav1-build" -DBUILD_APPS=OFF -DBUILD_DEC=OFF -DBUILD_TESTING=OFF -DENABLE_NASM=ON \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5  # 2.3.0 bundles an old cpuinfo CMakeLists
 fi
 
 # Static linking needs the libraries' own dependencies in their .pc files
