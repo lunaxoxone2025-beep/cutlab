@@ -1,5 +1,13 @@
 # Changelog
 
+## CUTLAB dev 0.2 — Phase 2 (2026-11-08)
+
+- Project library with create/open/rename/duplicate/delete, import/export of `.cutlab` files.
+- Atomic saves with `.bak`, autosave recovery file and restore prompt after crashes.
+- Media import on Android without copying files (persistable URIs, native duration/size/thumbnails) and on PC through native dialogs.
+- Missing-media detection and relink; undo/redo; save-on-close; settings screen.
+- Personal-use builds: Android APK, Windows and Linux on the `dev` release. macOS dropped.
+
 ## Unreleased — Phase 1 (architecture and foundation)
 
 - Repository restructured: CutLab Lite moved to `apps/web/`; root page redirects there.

@@ -13,23 +13,26 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ✅ Flutter application foundation: theme, new-project flow, responsive workspace shell, beginner/advanced switch
 - ✅ CI: hygiene, Lite checks, C++ matrix, Dart analysis/tests, Flutter analysis/tests, Android/Linux/Windows/macOS builds
 
-## Phase 2 — Application foundation ⬜
+## Phase 2 — Application foundation ✅
 
-1. Project library screen: list, create, open, rename, duplicate, delete `.cutlab` files (app documents folder)
-2. Save/Open/Import/Export `.cutlab` through native file dialogs (desktop) and the storage access framework (Android)
-3. Autosave to a recovery file + "restore unsaved project" prompt on launch
-4. Media browser: pick files, store `MediaRef`s with fingerprints, missing-media detection and relink
-5. Settings screen (preview quality, cache size, mode default)
-6. Landscape tablet layout; keyboard shortcut layer on desktop
+- ✅ Project library: list (newest first, damaged files flagged), create, open, rename, duplicate, delete
+- ✅ `.cutlab` save with atomic writes and a `.bak` of the previous save; import/export through native dialogs (desktop) and the Storage Access Framework (Android)
+- ✅ Autosave of unsaved work to a recovery file (configurable delay, also on app backgrounding) + "restore unsaved changes" prompt
+- ✅ Media browser: import video/audio/images; Android keeps persistable `content://` URIs (no copies) and reads duration, size and thumbnails natively; PC references files by path (`needsProbe` until Phase 3)
+- ✅ Missing-media detection and relink (same media id, clips stay attached); media still used by clips cannot be removed
+- ✅ Undo/redo for project edits, save state indicator, save-on-close
+- ✅ Settings: editor mode for new projects, autosave delay, project folder location
+- ✅ Installable builds: Android APK, Windows zip, Linux tarball on the rolling `dev` release
+- ➡️ Keyboard shortcuts and a dedicated landscape-tablet layout move to Phase 4, where the timeline needs them (tablets already get the desktop layout from 1000 px wide)
 
 ## Phase 3 — Media engine ⬜
 
-1. LGPL FFmpeg build in CI for each platform (+ license attribution file)
-2. `core/media`: probe (duration, streams, time base, VFR detection), demux, decode, seek-to-frame
+1. LGPL FFmpeg build in CI for Android and Windows/Linux (+ attribution file)
+2. `core/media`: probe (duration, streams, time base, VFR detection), demux, decode, seek-to-frame; fill `needsProbe` media on PC
 3. Android MediaCodec decode path; desktop hardware decode where available
-4. Thumbnail strips and waveform peaks in background, cached in SQLite
+4. Thumbnail strips and waveform peaks in background, cached per device (SQLite)
 5. CPU compositor + Flutter `Texture` preview; audio playback with A/V sync
-6. `ffigen` bindings and commit of native platform folders
+6. `ffigen` bindings to the C ABI
 
 ## Phase 4 — Timeline MVP ⬜
 
@@ -55,10 +58,10 @@ Color grading (temperature, tint, exposure, highlights/shadows, curves), LUT imp
 
 Proxy workflow, GPU render backends, memory budgets, hardware capability detection and automatic preview quality, long-form tests (2-hour projects), crash-recovery tests.
 
-## Phase 10 — Release ⬜
+## Phase 10 — Personal release ⬜
 
-Final testing, documentation, signed Android APK/AAB, Windows/Linux/macOS packages, GitHub Release, license decision and public open-source launch.
+Final testing on the owner's phone and PC, documentation, stable APK and Windows build. No public release (ARCHITECTURE D14).
 
 ## Exact next step
 
-**Phase 2, item 1–2:** implement the project library and `.cutlab` save/open on top of `packages/project_format`, including atomic writes and a recovery file, with tests for save → load → equality.
+**Phase 3, items 1–2:** build LGPL FFmpeg for Android (arm64) and Windows/Linux x64 in CI and implement `core/media` probing behind the C ABI, so imported PC media gets real duration and dimensions and Android probing moves to the shared engine.
