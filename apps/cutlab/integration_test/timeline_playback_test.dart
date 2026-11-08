@@ -207,6 +207,12 @@ void main() {
     await tester.tap(find.byKey(const Key('syncInfo')));
     await wait(300);
     expect(find.byKey(const Key('syncDiagnostics')), findsOneWidget);
+    final lines = find
+        .descendant(of: find.byKey(const Key('syncDiagnostics')), matching: find.byType(Text))
+        .evaluate()
+        .map((e) => (e.widget as Text).data ?? '')
+        .toList();
+    report('editor diagnostics: ${lines.join(' | ')}');
     await tester.tap(find.text('Close'));
     await wait(300);
     report('editor playback ok');
