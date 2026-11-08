@@ -121,6 +121,8 @@ fi
 
 # --- kvazaar (CMake)
 fetch ultravideo/kvazaar "$KVAZAAR_TAG" kvazaar
+# A GNU-assembler-only flag kvazaar adds on x86; clang (NDK) rejects it.
+grep -rl 'muse-unaligned-vector-move' "$WORK/kvazaar" --include=CMakeLists.txt --include='*.cmake' | xargs -r sed -i 's/-Wa,-muse-unaligned-vector-move//g'
 cmake_build "$WORK/kvazaar" "$WORK/kvazaar-build" -DBUILD_TESTS=OFF -DBUILD_KVAZAAR_BINARY=OFF -DUSE_CRYPTO=OFF
 
 # --- SVT-AV1 (software AV1; desktop only: far too slow on phones)
