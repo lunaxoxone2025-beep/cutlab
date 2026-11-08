@@ -210,6 +210,8 @@ void main() {
     report('settings: $summary');
     expect(summary, contains('1280 × 720 · 30 fps'));
     await tester.scrollUntilVisible(find.byKey(const Key('exportStart')), 300);
+    await tester.ensureVisible(find.byKey(const Key('exportStart')));
+    await wait(300);
     await tester.tap(find.byKey(const Key('exportStart')));
     final sw = Stopwatch()..start();
     var lastPct = '';
