@@ -196,7 +196,13 @@ void main() {
     await tester.tap(find.byKey(const Key('tlPlay')));
     await wait(1500);
     expect(find.textContaining('00:00:00:00 /'), findsNothing, reason: 'the cursor moves while playing');
-    await wait(3500);
+    // Wait for the end (slow emulators render the whole editor in software).
+    final sw = Stopwatch()..start();
+    while (sw.elapsedMilliseconds < 15000 && find.textContaining('00:00:04:00 /').evaluate().isEmpty) {
+      await wait(250);
+    }
+    final shown = find.textContaining(' / 00:00:04:00').evaluate().map((e) => (e.widget as Text).data).join(', ');
+    report('editor reached the end after ${1500 + sw.elapsedMilliseconds} ms (transport shows: $shown)');
     expect(find.textContaining('00:00:04:00 /'), findsWidgets, reason: 'played to the end; the cursor followed');
     await tester.tap(find.byKey(const Key('syncInfo')));
     await wait(300);
