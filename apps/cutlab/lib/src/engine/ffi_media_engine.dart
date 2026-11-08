@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -32,51 +33,111 @@ class FfiMediaEngine extends MediaEngine {
       final json = out.value.toDartString();
       b.free(out.value.cast());
       final m = _InfoJson.parse(json);
-      return FfiMediaEngine._(b, EngineInfo(available: true, ffmpegVersion: m.ffmpeg, hardwareDecoders: m.hw));
+      return FfiMediaEngine._(b, EngineInfo(available: true, ffmpegVersion: m.ffmpeg, hardwareDecoders: m.hw, cpus: m.cpus));
     } finally {
       calloc.free(out);
     }
   }
 
+  // Engine calls in flight per file (see [idle]).
+  final Map<String, int> _busy = {};
+  final Map<String, List<Completer<void>>> _idleWaiters = {};
+
+  Future<T> _track<T>(String uri, Future<T> Function() op) async {
+    _busy[uri] = (_busy[uri] ?? 0) + 1;
+    try {
+      return await op();
+    } finally {
+      final left = (_busy[uri] ?? 1) - 1;
+      if (left > 0) {
+        _busy[uri] = left;
+      } else {
+        _busy.remove(uri);
+        for (final c in _idleWaiters.remove(uri) ?? const <Completer<void>>[]) {
+          c.complete();
+        }
+      }
+    }
+  }
+
   @override
-  Future<ProbeInfo> probe(String engineUri) => _probeAsync(engineUri);
+  Future<void> idle(String engineUri) {
+    if (!_busy.containsKey(engineUri)) return Future.value();
+    final c = Completer<void>();
+    (_idleWaiters[engineUri] ??= []).add(c);
+    return c.future;
+  }
+
+  @override
+  Future<ProbeInfo> probe(String engineUri) => _track(engineUri, () => _probeAsync(engineUri));
 
   @override
   Future<RgbaImage> frameAt(String engineUri, int ticks, {bool accurate = true, int maxWidth = 640, int maxHeight = 360}) =>
-      _frameAsync(engineUri, ticks, accurate, maxWidth, maxHeight);
+      _track(engineUri, () => _frameAsync(engineUri, ticks, accurate, maxWidth, maxHeight));
 
   @override
   Future<ThumbnailStrip> thumbnails(String engineUri, int count, {int maxWidth = 160, int maxHeight = 90}) =>
-      _thumbnailsAsync(engineUri, count, maxWidth, maxHeight);
+      _track(engineUri, () => _thumbnailsAsync(engineUri, count, maxWidth, maxHeight));
 
   @override
-  Future<Peaks> peaks(String engineUri, {int bucketsPerSecond = 50}) => _peaksAsync(engineUri, bucketsPerSecond);
+  Future<Peaks> peaks(String engineUri, {int bucketsPerSecond = 50}) => _track(engineUri, () => _peaksAsync(engineUri, bucketsPerSecond));
 
   @override
-  PreviewPlayer openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) {
-    final out = calloc<Pointer<Void>>();
-    final uri = engineUri.toNativeUtf8();
+  Future<PreviewPlayer> openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) =>
+      _track(engineUri, () async {
+        final flags = hardware ? 0 : EngineBindings.flagSoftwareDecode;
+        final address = await _openPlayerAsync(engineUri, maxWidth, maxHeight, flags);
+        return _FfiPlayer(_b, Pointer<Void>.fromAddress(address), maxWidth, maxHeight);
+      });
+
+  @override
+  void initDiagnostics(String dir, String deviceInfo) {
+    final d = dir.toNativeUtf8();
+    final i = deviceInfo.toNativeUtf8();
     try {
-      final status = _b.playerOpen(uri, maxWidth, maxHeight, hardware ? 0 : EngineBindings.flagSoftwareDecode, out);
-      if (status != EngineBindings.statusOk) throw MediaEngineException(_b.lastErrorMessage);
-      return _FfiPlayer(_b, out.value, maxWidth, maxHeight);
+      _b.diagInit(d, i);
     } finally {
-      calloc.free(uri);
+      calloc.free(d);
+      calloc.free(i);
+    }
+  }
+
+  @override
+  void note(String text) {
+    final t = text.toNativeUtf8();
+    try {
+      _b.diagNote(t);
+    } finally {
+      calloc.free(t);
+    }
+  }
+
+  @override
+  String recentActivity() {
+    final out = calloc<Pointer<Utf8>>();
+    try {
+      if (_b.diagRecent(out) != EngineBindings.statusOk) return '';
+      final s = out.value.toDartString();
+      _b.free(out.value.cast());
+      return s;
+    } finally {
       calloc.free(out);
     }
   }
 }
 
 class _InfoJson {
-  _InfoJson(this.ffmpeg, this.hw);
+  _InfoJson(this.ffmpeg, this.hw, this.cpus);
   final String? ffmpeg;
   final List<String> hw;
+  final int cpus;
 
   static _InfoJson parse(String json) {
     final ff = RegExp(r'"ffmpeg":"([^"]*)"').firstMatch(json)?.group(1);
     final hwList = RegExp(r'"hardwareDecoders":\[([^\]]*)\]').firstMatch(json)?.group(1) ?? '';
     final hw = RegExp(r'"([^"]+)"').allMatches(hwList).map((m) => m.group(1)!).toList();
-    return _InfoJson(ff, hw);
+    final cpus = int.tryParse(RegExp(r'"cpus":(\d+)').firstMatch(json)?.group(1) ?? '') ?? 0;
+    return _InfoJson(ff, hw, cpus);
   }
 }
 
@@ -93,6 +154,8 @@ Future<ThumbnailStrip> _thumbnailsAsync(String uri, int count, int maxW, int max
     Isolate.run(() => _thumbnailsSync(uri, count, maxW, maxH));
 
 Future<Peaks> _peaksAsync(String uri, int bps) => Isolate.run(() => _peaksSync(uri, bps));
+
+Future<int> _openPlayerAsync(String uri, int maxW, int maxH, int flags) => Isolate.run(() => _openPlayerSync(uri, maxW, maxH, flags));
 
 EngineBindings _bindings() {
   final b = EngineBindings.tryLoad();
@@ -165,6 +228,22 @@ ThumbnailStrip _thumbnailsSync(String engineUri, int count, int maxW, int maxH) 
     calloc.free(h);
     calloc.free(n);
     calloc.free(pts);
+  }
+}
+
+/// Opens a native player; returns its address (pointers cannot be sent
+/// between isolates, plain integers can).
+int _openPlayerSync(String engineUri, int maxW, int maxH, int flags) {
+  final b = _bindings();
+  final uri = engineUri.toNativeUtf8();
+  final out = calloc<Pointer<Void>>();
+  try {
+    final status = b.playerOpen(uri, maxW, maxH, flags, out);
+    if (status != EngineBindings.statusOk) throw MediaEngineException(b.lastErrorMessage);
+    return out.value.address;
+  } finally {
+    calloc.free(uri);
+    calloc.free(out);
   }
 }
 

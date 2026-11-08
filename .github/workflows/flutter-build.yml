@@ -25,7 +25,7 @@ env:
   FLUTTER_VERSION: '3.24.5'
   # Distinct from CutLab Lite (com.lunaxoxone.cutlab) so both can be installed side by side.
   FLUTTER_ORG: com.lunaxoxone.studio
-  BUILD_NAME: 0.3.${{ github.run_number }}
+  BUILD_NAME: 0.4.${{ github.run_number }}
 
 jobs:
   android:
@@ -63,8 +63,10 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static \
             -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-android -DCUTLAB_BUILD_TESTS=OFF
           cmake --build build/core-android -j 4
+          # Keep the unstripped library: crash reports give offsets into it.
+          mkdir -p symbols && cp build/core-android/libcutlab_core.so symbols/libcutlab_core-arm64-v8a.so
           "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded build/core-android/libcutlab_core.so
-          ls -la build/core-android/libcutlab_core.so
+          ls -la build/core-android/libcutlab_core.so symbols/
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -77,18 +79,30 @@ jobs:
           cp -R platform_overlay/android/. android/
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           cp "$GITHUB_WORKSPACE/build/core-android/libcutlab_core.so" android/app/src/main/jniLibs/arm64-v8a/
-          # The engine targets Android 7.0+ (API 24).
-          sed -i -E 's/minSdk(Version)? *=? *flutter\.minSdkVersion/minSdk = 24/' android/app/build.gradle
-          grep -n "minSdk" android/app/build.gradle
+          # minSdk 24 (engine needs Android 7.0+) and the :hwprobe service.
+          python3 ../../scripts/android/patch_android_project.py android
+          grep -n "HwProbeService" android/app/src/main/AndroidManifest.xml
       - name: Use the fixed signing key (updates install over older builds)
         run: |
           mkdir -p ~/.android
           cp "$GITHUB_WORKSPACE/android-signing/cutlab.keystore" ~/.android/debug.keystore
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/cutlab/pubspec.yaml') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: Build APK
         working-directory: apps/cutlab
         run: |
           flutter pub get
-          flutter build apk --release --target-platform android-arm64 --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
+          # Gradle downloads occasionally fail with HTTP 5xx: retry.
+          for attempt in 1 2 3; do
+            flutter build apk --release --target-platform android-arm64 --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}" && break
+            [ $attempt -lt 3 ] || exit 1
+            echo "build failed (attempt $attempt), retrying in 30 s"; sleep 30
+          done
           cp build/app/outputs/flutter-apk/app-release.apk CUTLAB.apk
       - name: Check the engine is inside the APK
         working-directory: apps/cutlab
@@ -98,6 +112,11 @@ jobs:
           name: cutlab-android
           path: apps/cutlab/CUTLAB.apk
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cutlab-android-symbols
+          path: symbols
+          retention-days: 90
 
   windows:
     name: Windows x64 (with media engine)
@@ -192,8 +211,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: cutlab-*-x64
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: cutlab-android
+          path: dist
       - name: Replace the dev release
         env:
           GH_TOKEN: ${{ github.token }}

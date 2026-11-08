@@ -60,7 +60,8 @@ jobs:
             -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-android-x86_64 -DCUTLAB_BUILD_TESTS=ON
           cmake --build build/core-x86_64 -j 4
           mkdir -p dist/native
-          cp build/core-x86_64/libcutlab_core.so build/core-x86_64/cutlab_media_tests build/core-x86_64/cutlab_stress_preview build/core-x86_64/cutlab_core_tests dist/native/
+          cp build/core-x86_64/libcutlab_core.so build/core-x86_64/cutlab_media_tests build/core-x86_64/cutlab_stress_preview \
+            build/core-x86_64/cutlab_core_tests build/core-x86_64/cutlab_crash_report_tests dist/native/
       - id: mediacache
         uses: actions/cache@v4
         with:
@@ -132,6 +133,13 @@ jobs:
           printf '  assets:\n    - integration_test/media/\n' >> pubspec.yaml
           tail -5 pubspec.yaml
           flutter pub get
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/cutlab/pubspec.yaml') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: Run on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:

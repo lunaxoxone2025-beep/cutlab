@@ -97,6 +97,19 @@ jobs:
         env:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
         run: ctest --test-dir build/core -C Release --output-on-failure -V
+      - id: realmedia
+        uses: actions/cache@v4
+        with:
+          path: build/android-media
+          key: android-media-only-${{ hashFiles('scripts/make_android_test_media.sh') }}
+      - name: Real-size test media (1080p/4K, H.264/HEVC, portrait, long)
+        if: steps.realmedia.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y ffmpeg && scripts/make_android_test_media.sh build/android-media
+      - name: Preview stress test (players + timeline frames + thumbnails at once)
+        run: |
+          M=build/android-media
+          build/core/cutlab_stress_preview 5 $M/h264_1080p30.mp4 $M/h264_1080p60.mp4 $M/hevc_1080p60.mp4 $M/hevc10_4k30.mp4 \
+            $M/phone_portrait_1080p60.mp4 $M/long_720p30_10min.mp4 $M/vfr.mkv $M/tone.mp3 $M/red.png
 
   core-windows:
     name: C++ core + media engine (Windows x64)
@@ -127,6 +140,13 @@ jobs:
         run: |
           $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
           ctest --test-dir build/core -C Release --output-on-failure -V
+      - name: Preview stress test (players + timeline frames + thumbnails at once)
+        shell: pwsh
+        run: |
+          $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
+          $m = "${{ github.workspace }}/build/test-media"
+          build/core/Release/cutlab_stress_preview.exe 4 "$m/gray60.mp4" "$m/rotated.mp4" "$m/hevc10.mp4" "$m/vfr.mkv" "$m/tone.mp3" "$m/red.png"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   dart-packages:
     name: Dart package — project_format

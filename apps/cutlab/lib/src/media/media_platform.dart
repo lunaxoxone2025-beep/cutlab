@@ -80,6 +80,28 @@ abstract class MediaPlatform {
 
   /// Releases what [openForEngine] returned.
   Future<void> closeForEngine(String engineUri);
+
+  /// Whether hardware decoding may be used for [uri]. Videos with the same
+  /// [key] (see hardwareCheckKey) share the answer. On Android the decoder
+  /// is tried once in a separate process, so a faulty decoder cannot close
+  /// the app; on PC hardware decoding falls back to software by itself.
+  Future<HardwareCheck> checkHardwareDecoding(String uri, String key);
+
+  /// Forgets every hardware decoding check (they run again when needed).
+  Future<void> resetHardwareChecks();
+
+  /// Device, memory, video decoders, earlier crashes/exits and the folder
+  /// for crash reports, for the diagnostics screen.
+  Future<Map<String, Object?>> deviceInfo();
+}
+
+/// Result of a hardware decoding check.
+class HardwareCheck {
+  const HardwareCheck({required this.ok, this.detail = ''});
+  final bool ok;
+
+  /// Why hardware decoding is not used, or what was tested.
+  final String detail;
 }
 
 const videoExtensions = {'mp4', 'mov', 'mkv', 'webm', 'm4v', '3gp', 'avi', 'ts', 'mts', 'm2ts', 'flv', 'wmv'};

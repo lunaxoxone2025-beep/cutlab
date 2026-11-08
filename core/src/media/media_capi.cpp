@@ -2,7 +2,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 
+#include "../diag/diag.hpp"
 #include "audio_decoder.hpp"
 #include "cutlab/cutlab_core.h"
 #include "json.hpp"
@@ -59,7 +61,53 @@ Source source_of(const char* uri) {
   return Source::parse(uri);
 }
 
+// Player calls must never throw across the C boundary (that would end the app).
+template <typename F, typename R>
+R safe(F&& fn, R fallback) {
+  try {
+    return fn();
+  } catch (...) {
+    return fallback;
+  }
+}
+
 }  // namespace
+
+namespace cutlab::media {
+
+std::string hardware_self_test(const Source& src) {
+  DecodeOptions o;
+  o.prefer_hardware = true;
+  o.max_width = 640;
+  o.max_height = 640;
+  VideoDecoder dec(src, o);
+  const bool started_hw = dec.hardware();
+  const std::string first_decoder = dec.decoder_name();
+  VideoFrame f;
+  int frames = 0;
+  dec.seek(0, true);
+  for (int i = 0; i < 45 && dec.next(f); ++i) ++frames;
+  const Ticks dur = dec.duration();
+  if (dur > 0) {
+    if (dec.frame_at(dur / 2, f, true)) ++frames;
+    dec.seek(dur * 9 / 10, false);
+    for (int i = 0; i < 5 && dec.next(f); ++i) ++frames;
+  }
+  JsonWriter j;
+  j.begin_object();
+  j.key("ok").value(started_hw && dec.hardware() && frames > 0);
+  j.key("decoder").value(first_decoder);
+  j.key("hardware").value(started_hw);
+  j.key("stillHardware").value(dec.hardware());
+  j.key("frames").value(frames);
+  j.key("fallback").value(dec.hardware_fallback());
+  j.end_object();
+  diag::note("hardware self-test %s: decoder=%s frames=%d hw=%d fallback=%s", src.describe().c_str(), first_decoder.c_str(), frames,
+             dec.hardware() ? 1 : 0, dec.hardware_fallback().c_str());
+  return j.str();
+}
+
+}  // namespace cutlab::media
 
 struct cutlab_player {
   Player player;
@@ -99,6 +147,7 @@ cutlab_status cutlab_engine_info(char** out_json) {
     }
 #endif
     j.end_array();
+    j.key("cpus").value(static_cast<int64_t>(std::thread::hardware_concurrency()));
     j.end_object();
     *out_json = dup_string(j.str());
     if (!*out_json) throw std::bad_alloc();
@@ -121,6 +170,7 @@ cutlab_status cutlab_media_frame(const char* uri, int64_t ticks, int32_t max_w, 
     DecodeOptions o;
     o.max_width = max_w;
     o.max_height = max_h;
+    o.one_shot = true;
     VideoDecoder dec(source_of(uri), o);
     VideoFrame f;
     if (!dec.frame_at(ticks, f, accurate != 0)) throw MediaError("no frame at that time");
@@ -202,30 +252,40 @@ cutlab_status cutlab_player_open(const char* uri, int32_t max_w, int32_t max_h, 
   });
 }
 
-void cutlab_player_close(cutlab_player* p) { delete p; }
+void cutlab_player_close(cutlab_player* p) {
+  try {
+    delete p;
+  } catch (...) {
+    // Destructors join threads; nothing to recover here.
+  }
+}
 void cutlab_player_play(cutlab_player* p) {
-  if (p) p->player.play();
+  if (p) safe([&] { p->player.play(); return 0; }, 0);
 }
 void cutlab_player_pause(cutlab_player* p) {
-  if (p) p->player.pause();
+  if (p) safe([&] { p->player.pause(); return 0; }, 0);
 }
-int32_t cutlab_player_playing(cutlab_player* p) { return p && p->player.playing() ? 1 : 0; }
+int32_t cutlab_player_playing(cutlab_player* p) { return p ? safe([&] { return p->player.playing() ? 1 : 0; }, 0) : 0; }
 void cutlab_player_seek(cutlab_player* p, int64_t ticks, int32_t accurate) {
-  if (p) p->player.seek(ticks, accurate != 0);
+  if (p) safe([&] { p->player.seek(ticks, accurate != 0); return 0; }, 0);
 }
-int64_t cutlab_player_position(cutlab_player* p) { return p ? p->player.position() : 0; }
-int64_t cutlab_player_duration(cutlab_player* p) { return p ? p->player.duration() : 0; }
+int64_t cutlab_player_position(cutlab_player* p) { return p ? safe([&] { return p->player.position(); }, int64_t{0}) : 0; }
+int64_t cutlab_player_duration(cutlab_player* p) { return p ? safe([&] { return p->player.duration(); }, int64_t{0}) : 0; }
 
 int32_t cutlab_player_frame(cutlab_player* p, uint64_t* serial, uint8_t* dst, int64_t capacity, int32_t* out_w, int32_t* out_h,
                             int64_t* out_pts) {
   if (!p || !serial) return 0;
-  int w = 0, h = 0;
-  Ticks pts = 0;
-  const bool ok = p->player.frame(serial, dst, capacity > 0 ? static_cast<size_t>(capacity) : 0, &w, &h, &pts);
-  if (out_w) *out_w = w;
-  if (out_h) *out_h = h;
-  if (out_pts) *out_pts = pts;
-  return ok ? 1 : 0;
+  return safe(
+      [&]() -> int32_t {
+        int w = 0, h = 0;
+        Ticks pts = 0;
+        const bool ok = p->player.frame(serial, dst, capacity > 0 ? static_cast<size_t>(capacity) : 0, &w, &h, &pts);
+        if (out_w) *out_w = w;
+        if (out_h) *out_h = h;
+        if (out_pts) *out_pts = pts;
+        return ok ? 1 : 0;
+      },
+      int32_t{0});
 }
 
 cutlab_status cutlab_player_stats(cutlab_player* p, char** out_json) {
@@ -233,6 +293,35 @@ cutlab_status cutlab_player_stats(cutlab_player* p, char** out_json) {
   return guarded([&] {
     *out_json = dup_string(p->player.stats_json());
     if (!*out_json) throw std::bad_alloc();
+  });
+}
+
+cutlab_status cutlab_hw_self_test(const char* uri, char** out_json) {
+  if (!out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    *out_json = dup_string(hardware_self_test(source_of(uri)));
+    if (!*out_json) throw std::bad_alloc();
+  });
+}
+
+cutlab_status cutlab_diag_init(const char* dir, const char* device_info) {
+  return guarded([&] { diag::init(dir ? dir : "", device_info ? device_info : ""); });
+}
+
+void cutlab_diag_note(const char* text) {
+  if (text) diag::note("%s", text);
+}
+
+cutlab_status cutlab_diag_recent(char** out_text) {
+  if (!out_text) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    int64_t rss = 0, peak = 0;
+    diag::memory_kib(&rss, &peak);
+    std::string text = diag::recent();
+    text += "memory: rss " + std::to_string(rss / 1024) + " MB, peak " + std::to_string(peak / 1024) + " MB; hardware decoders open: " +
+            std::to_string(diag::hardware_decoders_open()) + "\n";
+    *out_text = dup_string(text);
+    if (!*out_text) throw std::bad_alloc();
   });
 }
 

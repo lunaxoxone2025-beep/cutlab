@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cutlab/src/editor/editor_controller.dart';
@@ -156,4 +157,49 @@ void main() {
       expect((await store.open(p.id)).media.single.needsProbe, isFalse);
     });
   });
+
+  test('PlayerStats carries the hardware fallback, decoding errors and memory', () {
+    final s = PlayerStats.fromJson('{"decoder":"hevc","hardware":false,"hardwareFallback":"hevc_mediacodec could not start: x",'
+        '"error":"video: out of memory while decoding video","decoderThreads":3,"rssKiB":204800,"peakRssKiB":409600}');
+    expect(s.hardwareFallback, contains('hevc_mediacodec'));
+    expect(s.error, contains('out of memory'));
+    expect(s.decoderThreads, 3);
+    expect(s.rssKiB, 204800);
+    expect(s.peakRssKiB, 409600);
+  });
+
+  test('hardware decoding checks are shared by videos of the same kind', () {
+    const m = MediaRef(id: 'a', kind: MediaKind.video, uri: 'x', displayName: 'x', durationTicks: 0);
+    expect(
+        hardwareCheckKey(
+            const ProbeInfo(
+                container: 'mp4', durationTicks: 0, videoCodec: 'hevc', width: 3840, height: 2160, bitDepth: 10, frameRate: Rational.fps59_94),
+            m),
+        'hevc-10bit-2160p60');
+    expect(hardwareCheckKey(const ProbeInfo(container: 'mp4', durationTicks: 0, videoCodec: 'h264', width: 1080, height: 1920, frameRate: Rational.fps30), m),
+        'h264-8bit-1080p30');
+    expect(hardwareCheckKey(null, m), 'unknown-8bit-720p30');
+  });
+
+  test('an engine call in progress delays closing the file', () async {
+    final media = FakeMediaPlatform();
+    final engine = _SlowEngine();
+    final store = ProjectStore(MemoryBackend());
+    final p = await store.create(name: 'x');
+    final c = EditorController(project: p, store: store, media: media, engine: engine);
+    final release = c.releaseEngineUri('fd:7');
+    await Future<void>.delayed(Duration.zero);
+    expect(media.closed, isEmpty, reason: 'a thumbnail is still reading fd:7');
+    engine.finish();
+    await release;
+    expect(media.closed, ['fd:7']);
+    c.dispose();
+  });
+}
+
+class _SlowEngine extends FakeMediaEngine {
+  final _done = Completer<void>();
+  void finish() => _done.complete();
+  @override
+  Future<void> idle(String engineUri) => _done.future;
 }

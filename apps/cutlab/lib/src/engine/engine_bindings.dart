@@ -45,7 +45,12 @@ class EngineBindings {
                 Pointer<Int64>)>('cutlab_player_frame'),
         playerStats =
             lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
-                'cutlab_player_stats');
+                'cutlab_player_stats'),
+        hwSelfTest = lib.lookupFunction<_StatusOutJson, StatusOutJsonDart>('cutlab_hw_self_test'),
+        diagInit = lib.lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>(
+            'cutlab_diag_init'),
+        diagNote = lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('cutlab_diag_note'),
+        diagRecent = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_diag_recent');
 
   final Pointer<Utf8> Function() lastError;
   final void Function(Pointer<Void>) free;
@@ -66,6 +71,10 @@ class EngineBindings {
   final int Function(Pointer<Void>) playerDuration;
   final int Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, int, Pointer<Int32>, Pointer<Int32>, Pointer<Int64>) playerFrame;
   final int Function(Pointer<Void>, Pointer<Pointer<Utf8>>) playerStats;
+  final StatusOutJsonDart hwSelfTest;
+  final int Function(Pointer<Utf8>, Pointer<Utf8>) diagInit;
+  final void Function(Pointer<Utf8>) diagNote;
+  final int Function(Pointer<Pointer<Utf8>>) diagRecent;
 
   static const statusOk = 0;
   static const statusUnavailable = 4;

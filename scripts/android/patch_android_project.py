@@ -4,6 +4,8 @@
     patch_android_project.py <android-dir>
 
 - minSdk 24 (the media engine needs Android 7.0+).
+- Declares HwProbeService in its own process (":hwprobe"), where hardware
+  video decoders are tried before the editor uses them.
 Idempotent: safe to run more than once.
 """
 import pathlib
@@ -19,3 +21,16 @@ text = gradle.read_text()
 text = re.sub(r"minSdk(Version)?\s*=?\s*flutter\.minSdkVersion", "minSdk = 24", text)
 gradle.write_text(text)
 print("minSdk:", [l.strip() for l in text.splitlines() if "minSdk" in l])
+
+manifest = android / "app" / "src" / "main" / "AndroidManifest.xml"
+xml = manifest.read_text()
+if "HwProbeService" not in xml:
+    service = (
+        '        <service android:name=".HwProbeService" android:process=":hwprobe" '
+        'android:exported="false" />\n'
+    )
+    xml = xml.replace("    </application>", service + "    </application>", 1)
+    if "HwProbeService" not in xml:
+        sys.exit("could not add HwProbeService to " + str(manifest))
+    manifest.write_text(xml)
+print("manifest: HwProbeService declared")

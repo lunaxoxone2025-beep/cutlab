@@ -42,7 +42,9 @@ class AndroidMediaPlatform implements MediaPlatform {
 
   @override
   Future<String> openForEngine(String uri) async {
-    if (!uri.startsWith('content://')) return uri;
+    // content:// (picked files) and file:// both go through the
+    // ContentResolver: the engine reads a descriptor, never a copy.
+    if (!uri.startsWith('content://') && !uri.startsWith('file://')) return uri;
     final fd = await _channel.invokeMethod<int>('openFd', {'uri': uri});
     if (fd == null || fd < 0) throw Exception('cannot open $uri');
     return 'fd:$fd';
@@ -53,6 +55,19 @@ class AndroidMediaPlatform implements MediaPlatform {
     if (!engineUri.startsWith('fd:')) return;
     await _channel.invokeMethod<void>('closeFd', {'fd': int.parse(engineUri.substring(3))});
   }
+
+  @override
+  Future<HardwareCheck> checkHardwareDecoding(String uri, String key) async {
+    final r = await _channel.invokeMapMethod<String, Object?>('checkHardware', {'uri': uri, 'key': key});
+    return HardwareCheck(ok: r?['ok'] == true, detail: r?['detail'] as String? ?? '');
+  }
+
+  @override
+  Future<void> resetHardwareChecks() => _channel.invokeMethod<void>('resetHardwareChecks');
+
+  @override
+  Future<Map<String, Object?>> deviceInfo() async =>
+      await _channel.invokeMapMethod<String, Object?>('deviceInfo') ?? const <String, Object?>{};
 
   /// Converts one map from the channel into a [PickedMedia]. Public for tests.
   static PickedMedia fromChannelMap(Map<Object?, Object?> m) {

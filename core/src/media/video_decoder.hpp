@@ -14,8 +14,13 @@ struct DecodeOptions {
   int max_height = 0;
   bool prefer_hardware = false;
   bool keyframes_only = false;  // thumbnails: skip everything but keyframes
-  int threads = 0;              // 0 = automatic
+  bool one_shot = false;        // a few frames only (timeline frames, thumbnails): slice threads, small memory
+  int threads = 0;              // 0 = automatic (by resolution and CPU count)
 };
+
+/// Decoder threads for a stream: frame threads cost one decoded picture
+/// each, so big pictures get fewer threads (a 4K 10-bit picture is ~25 MB).
+int decoder_threads(int width, int height, bool one_shot, unsigned cpus);
 
 /// A decoded frame converted to tightly packed RGBA (width * 4 bytes per row),
 /// with the stream rotation already applied.
@@ -57,10 +62,15 @@ class VideoDecoder {
   bool hardware() const { return hw_active_; }
   const std::string& decoder_name() const { return decoder_name_; }
   int64_t decode_errors() const { return decode_errors_; }
+  /// Why hardware decoding was not used or was abandoned ("" = no fallback).
+  const std::string& hardware_fallback() const { return hw_fallback_; }
+  int threads() const { return threads_; }
 
  private:
   void open_codec(bool try_hardware);
+  void release_codec();
   bool pull(FramePtr& out);
+  bool pull_checked(FramePtr& out);
   bool pull_raw(FramePtr& out);
   void convert(const AVFrame* f, VideoFrame& out);
   Ticks frame_pts(const AVFrame* f);
@@ -69,13 +79,17 @@ class VideoDecoder {
 
   Demuxer demux_;
   DecodeOptions opts_;
+  int64_t budget_ = 0;  // pixels reserved from the one-shot decode budget
   int stream_ = -1;
   AVStream* st_ = nullptr;
   CodecContextPtr ctx_;
   AVBufferRef* hw_device_ = nullptr;
   AVPixelFormat hw_format_ = AV_PIX_FMT_NONE;
   bool hw_active_ = false;
+  bool hw_counted_ = false;
   std::string decoder_name_;
+  std::string hw_fallback_;
+  int threads_ = 1;
 
   PacketPtr pkt_;
   FramePtr pending_;

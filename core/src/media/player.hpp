@@ -21,7 +21,8 @@ struct PlayerOptions {
   int max_height = 720;
   bool prefer_hardware = true;
   bool null_audio_device = false;  // tests / headless: audio is consumed but not heard
-  int video_queue_frames = 8;      // decoded frames kept ahead of the playhead
+  int video_queue_frames = 8;      // decoded frames kept ahead of the playhead (upper limit)
+  size_t video_queue_bytes = 48u << 20;  // and at most this much RGBA in the queue
 };
 
 /// Plays one media file.
@@ -58,6 +59,9 @@ class Player {
   bool frame(uint64_t* serial, uint8_t* dst, size_t capacity, int* w, int* h, Ticks* pts);
 
   std::string stats_json() const;
+
+  /// Last decoding problem ("" if none); playback stops at a broken stream.
+  std::string error() const;
 
  private:
   struct AudioOut;
@@ -101,6 +105,8 @@ class Player {
   uint64_t current_serial_ = 0;
   int64_t frames_decoded_ = 0;
   int64_t frames_dropped_ = 0;
+  size_t queue_limit_ = 8;
+  std::string error_;
 
   // Audio.
   bool audio_seek_pending_ = false;

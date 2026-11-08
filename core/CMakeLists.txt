@@ -40,7 +40,8 @@ if(CUTLAB_WITH_MEDIA)
     src/media/audio_decoder.cpp
     src/media/player.cpp
     src/media/miniaudio_impl.c
-    src/media/media_capi.cpp)
+    src/media/media_capi.cpp
+    src/diag/diag.cpp)
   if(ANDROID)
     list(APPEND CORE_SOURCES src/platform/android_jni.cpp)
   endif()
@@ -114,5 +115,11 @@ if(CUTLAB_BUILD_TESTS)
     find_package(Threads REQUIRED)
     add_executable(cutlab_stress_preview tests/stress_preview.cpp)
     target_link_libraries(cutlab_stress_preview PRIVATE cutlab_core Threads::Threads)
+    if(UNIX)
+      # The native crash handler (fork + deliberate crash; POSIX only).
+      add_executable(cutlab_crash_report_tests tests/test_crash_report.cpp)
+      target_link_libraries(cutlab_crash_report_tests PRIVATE cutlab_core)
+      add_test(NAME cutlab_crash_report_tests COMMAND cutlab_crash_report_tests ${CMAKE_CURRENT_BINARY_DIR}/crash-report-test)
+    endif()
   endif()
 endif()

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "../diag/diag.hpp"
 #include "json.hpp"
 #include "miniaudio.h"
 
@@ -86,6 +87,10 @@ Player::Player(const Source& src, PlayerOptions opts) : opts_(opts) {
   }
   if (!video_ && !audio_) throw MediaError("no playable stream in " + src.describe());
 
+  // Bound the decoded-picture queue by memory, not only by count.
+  const size_t frame_bytes = static_cast<size_t>(std::max(2, opts.max_width)) * std::max(2, opts.max_height) * 4;
+  queue_limit_ = std::clamp<size_t>(opts.video_queue_bytes / std::max<size_t>(1, frame_bytes), 2, std::max(2, opts.video_queue_frames));
+
   ring_capacity_ = static_cast<size_t>(kOutRate / 2) * kOutChannels;  // 0.5 s
   if (audio_) {
     out_ = std::make_unique<AudioOut>();
@@ -95,6 +100,11 @@ Player::Player(const Source& src, PlayerOptions opts) : opts_(opts) {
   video_seek_pending_ = video_ != nullptr;
   video_seek_target_ = 0;
   audio_seek_pending_ = audio_ != nullptr;
+  int64_t rss = 0, peak = 0;
+  diag::memory_kib(&rss, &peak);
+  diag::note("player open %s video=%s audio=%d device=%d queue=%zu rss=%lldMB", src.describe().c_str(),
+             video_ ? video_->decoder_name().c_str() : "none", audio_ ? 1 : 0, audio_device_ok_ ? 1 : 0, queue_limit_,
+             static_cast<long long>(rss / 1024));
   if (video_) video_thread_ = std::thread(&Player::video_loop, this);
   if (audio_) audio_thread_ = std::thread(&Player::audio_loop, this);
 }
@@ -110,6 +120,10 @@ Player::~Player() {
   if (video_thread_.joinable()) video_thread_.join();
   if (audio_thread_.joinable()) audio_thread_.join();
   out_.reset();
+  int64_t rss = 0, peak = 0;
+  diag::memory_kib(&rss, &peak);
+  diag::note("player closed (frames %lld, dropped %lld) rss=%lldMB peak=%lldMB", static_cast<long long>(frames_decoded_),
+             static_cast<long long>(frames_dropped_), static_cast<long long>(rss / 1024), static_cast<long long>(peak / 1024));
 }
 
 bool Player::playing() const {
@@ -207,7 +221,7 @@ void Player::video_loop() {
   std::unique_lock<std::mutex> lock(mu_);
   while (!quit_) {
     cv_.wait(lock, [&] {
-      return quit_ || video_seek_pending_ || (!video_eof_ && queue_.size() < static_cast<size_t>(opts_.video_queue_frames));
+      return quit_ || video_seek_pending_ || (!video_eof_ && queue_.size() < queue_limit_);
     });
     if (quit_) break;
     bool do_seek = false;
@@ -223,13 +237,21 @@ void Player::video_loop() {
     lock.unlock();
     VideoFrame f;
     bool ok = false;
+    std::string err;
+    // Nothing may escape this thread: an uncaught exception would end the app.
     try {
       if (do_seek) video_->seek(target, accurate);
       ok = video_->next(f);
-    } catch (const MediaError&) {
-      ok = false;  // treat a broken stream like its end
+    } catch (const std::bad_alloc&) {
+      err = "out of memory while decoding video";
+    } catch (const std::exception& e) {
+      err = e.what();
+    } catch (...) {
+      err = "unknown video decoding error";
     }
+    if (!err.empty()) diag::note("video decoding stopped: %s", err.c_str());
     lock.lock();
+    if (!err.empty()) error_ = "video: " + err;
     if (gen != generation_) continue;  // a newer seek arrived meanwhile
     if (ok) {
       queue_.push_back(std::move(f));
@@ -253,13 +275,23 @@ void Player::audio_loop() {
     const uint64_t gen = generation_;
     lock.unlock();
     size_t n = 0;
+    std::string err;
     try {
       if (do_seek) audio_->seek(target);
       n = audio_->read(chunk.data(), chunk.size() / kOutChannels);
-    } catch (const MediaError&) {
+    } catch (const std::bad_alloc&) {
+      err = "out of memory while decoding audio";
+    } catch (const std::exception& e) {
+      err = e.what();
+    } catch (...) {
+      err = "unknown audio decoding error";
+    }
+    if (!err.empty()) diag::note("audio decoding stopped: %s", err.c_str());
+    lock.lock();
+    if (!err.empty()) {
+      error_ = "audio: " + err;
       n = 0;
     }
-    lock.lock();
     if (gen != generation_) continue;
     ring_.insert(ring_.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(n * kOutChannels));
     if (n < chunk.size() / kOutChannels) audio_eof_ = true;
@@ -358,8 +390,21 @@ std::string Player::stats_json() const {
   j.key("queuedFrames").value(static_cast<int64_t>(queue_.size()));
   j.key("audioBufferedTicks").value(mul_div(static_cast<int64_t>(ring_.size() / kOutChannels), kTicksPerSecond, kOutRate, Rounding::Down));
   j.key("audioUnderruns").value(underruns_);
+  j.key("hardwareFallback").value(video_ ? video_->hardware_fallback() : std::string());
+  j.key("decoderThreads").value(static_cast<int64_t>(video_ ? video_->threads() : 0));
+  j.key("queueLimit").value(static_cast<int64_t>(queue_limit_));
+  j.key("error").value(error_);
+  int64_t rss = 0, peak = 0;
+  diag::memory_kib(&rss, &peak);
+  j.key("rssKiB").value(rss);
+  j.key("peakRssKiB").value(peak);
   j.end_object();
   return j.str();
+}
+
+std::string Player::error() const {
+  std::lock_guard<std::mutex> lock(mu_);
+  return error_;
 }
 
 }  // namespace cutlab::media

@@ -99,7 +99,8 @@ class TimelineAssets extends ChangeNotifier {
       }
     }
     for (final f in _engineUris.values) {
-      unawaited(f.then(controller.media.closeForEngine).catchError((Object _) {}));
+      // Thumbnails/waveforms/monitor frames may still be reading the file.
+      unawaited(f.then(controller.releaseEngineUri).catchError((Object _) {}));
     }
     super.dispose();
   }

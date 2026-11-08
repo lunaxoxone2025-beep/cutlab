@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services.dart';
 import '../storage/app_settings.dart';
 import '../theme.dart';
+import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.services});
@@ -74,7 +75,9 @@ class SettingsScreen extends StatelessWidget {
               key: const Key('hardwareDecoding'),
               contentPadding: EdgeInsets.zero,
               title: const Text('Hardware video decoding'),
-              subtitle: const Text('Uses the phone or PC video decoder when available; falls back to software automatically.',
+              subtitle: const Text(
+                  'Uses the phone or PC video decoder when available. On Android each kind of video is tested first in a '
+                  'separate process; if the decoder fails or crashes there, software decoding is used.',
                   style: TextStyle(fontSize: 12)),
               value: s.hardwareDecoding,
               onChanged: (v) => services.updateSettings(services.settings.value.copyWith(hardwareDecoding: v)),
@@ -88,6 +91,16 @@ class SettingsScreen extends StatelessWidget {
                       '${services.engine.info.hardwareDecoders.isEmpty ? 'none' : services.engine.info.hardwareDecoders.join(', ')}'
                   : services.engine.info.reason ?? 'Not available',
               style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: CutlabSpacing.lg),
+            ListTile(
+              key: const Key('openDiagnostics'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('Diagnostics'),
+              subtitle: const Text('Crash reports, device and decoder information', style: TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DiagnosticsScreen(services: services))),
             ),
             const SizedBox(height: CutlabSpacing.xl),
             const Text('Project folder', style: TextStyle(fontWeight: FontWeight.w600)),

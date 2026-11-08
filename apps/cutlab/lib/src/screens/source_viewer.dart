@@ -32,6 +32,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
   PreviewPlayer? _player;
   String? _engineUri;
   String? _error;
+  String? _hwNote;
   bool _opening = true;
 
   ui.Image? _image;
@@ -88,18 +89,46 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
     setState(() {
       _opening = true;
       _error = null;
+      _hwNote = null;
       _strip = null;
       _peaks = null;
     });
+    final c = widget.controller;
+    final m = widget.media;
     String? uri;
     try {
-      uri = await widget.controller.media.openForEngine(widget.media.uri);
+      uri = await c.media.openForEngine(m.uri);
       if (!mounted || gen != _openGeneration) {
-        unawaited(widget.controller.media.closeForEngine(uri));
+        unawaited(c.releaseEngineUri(uri));
         return;
       }
       final s = widget.settings;
-      final player = _engine.openPlayer(uri, maxWidth: s.previewMaxWidth, maxHeight: s.previewMaxHeight, hardware: s.hardwareDecoding);
+      var hardware = s.hardwareDecoding && m.kind == MediaKind.video;
+      if (hardware) {
+        // On Android the hardware decoder is first tried in a separate
+        // process, so a faulty phone decoder cannot close CUTLAB.
+        try {
+          final check = await c.media.checkHardwareDecoding(m.uri, hardwareCheckKey(c.probeInfo(m.id), m));
+          if (!check.ok) {
+            hardware = false;
+            _hwNote = check.detail;
+          }
+        } on Object catch (e) {
+          hardware = false;
+          _hwNote = 'hardware check failed: $e';
+        }
+        if (!mounted || gen != _openGeneration) {
+          unawaited(c.releaseEngineUri(uri));
+          return;
+        }
+      }
+      c.engine.note('preview open ${m.displayName} hardware=$hardware ${_hwNote ?? ''}');
+      final player = await _engine.openPlayer(uri, maxWidth: s.previewMaxWidth, maxHeight: s.previewMaxHeight, hardware: hardware);
+      if (!mounted || gen != _openGeneration) {
+        player.dispose();
+        unawaited(c.releaseEngineUri(uri));
+        return;
+      }
       _player = player;
       _engineUri = uri;
       setState(() {
@@ -109,8 +138,9 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
       _wake(const Duration(seconds: 2));
       unawaited(_loadExtras(uri, gen));
     } on Object catch (e) {
-      if (uri != null) unawaited(widget.controller.media.closeForEngine(uri));
+      if (uri != null) unawaited(c.releaseEngineUri(uri));
       if (!mounted || gen != _openGeneration) return;
+      c.engine.note('preview failed ${m.displayName}: $e');
       setState(() {
         _opening = false;
         _error = 'Cannot play this file: $e';
@@ -142,11 +172,13 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
     _player = null;
     final uri = _engineUri;
     _engineUri = null;
-    if (uri != null) unawaited(widget.controller.media.closeForEngine(uri));
+    // Thumbnails may still be reading the file: close it once they finish.
+    if (uri != null) unawaited(widget.controller.releaseEngineUri(uri));
     _image?.dispose();
     _image = null;
     _pending = null;
     _playing = false;
+    _stats = const PlayerStats();
   }
 
   /// Keeps polling frames for a while (frames arrive asynchronously after a
@@ -166,16 +198,25 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
     _lastTick = elapsed;
     final p = _player;
     if (p == null) return;
-    final frame = p.pollFrame();
-    if (frame != null) {
-      _pending = frame;
-      _decodePending();
+    // While a picture is being uploaded, leave newer ones in the engine
+    // (copying every frame would only make garbage on slow phones).
+    if (!_decoding) {
+      final frame = p.pollFrame();
+      if (frame != null) {
+        _pending = frame;
+        _decodePending();
+      }
     }
     final playing = p.playing;
     final pos = p.positionTicks;
     if (elapsed - _lastStats > const Duration(seconds: 1)) {
       _lastStats = elapsed;
+      final before = _stats.error;
       _stats = p.stats();
+      if (_stats.error.isNotEmpty && _stats.error != before) {
+        widget.controller.engine.note('preview decoding error ${widget.media.displayName}: ${_stats.error}');
+        setState(() {});
+      }
     }
     if (pos != _position || playing != _playing) {
       setState(() {
@@ -250,9 +291,26 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
             alignment: Alignment.center,
             child: m.kind == MediaKind.audio
                 ? _Waveform(peaks: _peaks, position: _duration > 0 ? shownTime / _duration : 0)
-                : (_image == null
-                    ? const SizedBox.shrink()
-                    : RawImage(image: _image, fit: BoxFit.contain, filterQuality: FilterQuality.medium)),
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (_image != null) RawImage(image: _image, fit: BoxFit.contain, filterQuality: FilterQuality.medium),
+                      if (_stats.error.isNotEmpty)
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            key: const Key('decodeError'),
+                            color: Colors.black87,
+                            padding: const EdgeInsets.all(CutlabSpacing.sm),
+                            child: Text(
+                              'This video could not be decoded further: ${_stats.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
           ),
         ),
         if (_strip != null && _strip!.isNotEmpty)
@@ -325,6 +383,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
                   [
                     if (info != null) info.summary,
                     if (_stats.decoder.isNotEmpty) '${_stats.hardware ? 'HW' : 'SW'} ${_stats.decoder}',
+                    if (!_stats.hardware && (_hwNote != null || _stats.hardwareFallback.isNotEmpty)) 'hardware off',
                     if (_stats.framesDropped > 0) '${_stats.framesDropped} dropped',
                   ].join(' · '),
                   overflow: TextOverflow.ellipsis,

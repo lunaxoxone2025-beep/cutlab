@@ -59,6 +59,18 @@ class EditorController extends ChangeNotifier {
   bool get canRedo => _redo.isNotEmpty;
   bool get hasUnsavedChanges => _state == SaveState.unsaved || _state == SaveState.error;
 
+  /// Closes what [MediaPlatform.openForEngine] returned once no engine call
+  /// still reads it (closing a descriptor in use could hand its number to
+  /// another file). Never throws.
+  Future<void> releaseEngineUri(String engineUri) async {
+    try {
+      await engine.idle(engineUri);
+      await media.closeForEngine(engineUri);
+    } on Object {
+      // Already closed or the platform is gone: nothing to release.
+    }
+  }
+
   /// A new unique id for clips, tracks and links.
   String newId() => store.newId();
 

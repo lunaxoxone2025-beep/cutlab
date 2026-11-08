@@ -11,8 +11,16 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:cutlab/src/app.dart';
 import 'package:cutlab/src/engine/ffi_media_engine.dart';
 import 'package:cutlab/src/engine/media_engine.dart';
+import 'package:cutlab/src/media/android_media_platform.dart';
+import 'package:cutlab/src/services.dart';
+import 'package:cutlab/src/storage/app_settings.dart';
+import 'package:cutlab/src/storage/project_store.dart';
+import 'package:cutlab/src/storage/store_backend.dart';
+import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -80,7 +88,7 @@ void main() {
 
   /// Plays for [ms], scrubs, and returns what happened.
   Future<Map<String, Object>> play(String uri, {required bool hardware, int ms = 2000, int box = 1280}) async {
-    final p = engine.openPlayer(uri, maxWidth: box, maxHeight: box, hardware: hardware);
+    final p = await engine.openPlayer(uri, maxWidth: box, maxHeight: box, hardware: hardware);
     var frames = 0, w = 0, h = 0;
     Future<void> pump(int forMs) async {
       final sw = Stopwatch()..start();
@@ -111,11 +119,54 @@ void main() {
       p.play();
       await pump(500);
       final s = p.stats();
-      return {'frames': frames, 'size': '${w}x$h', 'decoder': s.decoder, 'hardware': s.hardware, 'dropped': s.framesDropped, 'audio': s.audioDevice};
+      return {
+        'frames': frames,
+        'size': '${w}x$h',
+        'decoder': s.decoder,
+        'hardware': s.hardware,
+        'dropped': s.framesDropped,
+        'audio': s.audioDevice,
+        'threads': s.decoderThreads,
+        'fallback': s.hardwareFallback,
+        'error': s.error,
+        'rssMB': s.rssKiB ~/ 1024,
+        'peakMB': s.peakRssKiB ~/ 1024,
+      };
     } finally {
       p.dispose();
     }
   }
+
+  testWidgets('device information and decoder list', (tester) async {
+    await tester.runAsync(() async {
+      final info = await AndroidMediaPlatform().deviceInfo();
+      for (final e in info.entries) {
+        final v = e.value;
+        if (v is List<Object?>) {
+          for (final item in v) {
+            report('device ${e.key}: $item');
+          }
+        } else {
+          report('device ${e.key}: $v');
+        }
+      }
+      expect(info['platform'], 'android');
+    });
+  });
+
+  testWidgets('hardware decoder check runs in its own process', (tester) async {
+    await tester.runAsync(() async {
+      final media = AndroidMediaPlatform();
+      await media.resetHardwareChecks();
+      for (final name in videos.keys) {
+        final sw = Stopwatch()..start();
+        final check = await media.checkHardwareDecoding(Uri.file(paths[name]!).toString(), 'test-$name');
+        report('hwcheck $name ok=${check.ok} ${sw.elapsedMilliseconds}ms: ${check.detail}');
+        final again = await media.checkHardwareDecoding(Uri.file(paths[name]!).toString(), 'test-$name');
+        expect(again.ok, check.ok, reason: 'cached answer');
+      }
+    });
+  });
 
   testWidgets('engine loads with FFmpeg and MediaCodec', (tester) async {
     report('engine available=${engine.available} ffmpeg=${engine.info.ffmpegVersion} hw=${engine.info.hardwareDecoders} '
@@ -162,7 +213,7 @@ void main() {
       for (var i = 0; i < 25; i++) {
         final name = videos.keys.elementAt(i % videos.length);
         await withFd(name, (uri) async {
-          final p = engine.openPlayer(uri, maxWidth: 1280, maxHeight: 1280, hardware: i.isEven);
+          final p = await engine.openPlayer(uri, maxWidth: 1280, maxHeight: 1280, hardware: i.isEven);
           p.play();
           await Future<void>.delayed(Duration(milliseconds: (i * 13) % 120));
           p.pollFrame();
@@ -180,7 +231,7 @@ void main() {
         await withFd(name, (uri) async {
           for (final hw in [true, false]) {
             try {
-              final p = engine.openPlayer(uri, hardware: hw);
+              final p = await engine.openPlayer(uri, hardware: hw);
               p.play();
               await Future<void>.delayed(const Duration(milliseconds: 500));
               p.pollFrame();
@@ -198,5 +249,72 @@ void main() {
         });
       }
     });
+  });
+
+  testWidgets('full editor: timeline, monitor, thumbnails and preview together (memory)', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    Future<void> wait(int ms) async {
+      final end = DateTime.now().add(Duration(milliseconds: ms));
+      while (DateTime.now().isBefore(end)) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump();
+      }
+    }
+
+    void memory(String when) => report('memory $when: rss ${ProcessInfo.currentRss ~/ 1048576} MB, max ${ProcessInfo.maxRss ~/ 1048576} MB');
+
+    final media = AndroidMediaPlatform();
+    final services = AppServices(
+      projects: ProjectStore(MemoryBackend()),
+      settingsStore: SettingsStore(MemoryBackend()),
+      media: media,
+      engine: engine,
+      settings: const AppSettings(previewHeight: 1080),
+    );
+    const names = ['hevc10_4k30.mp4', 'h264_1080p60.mp4', 'phone_portrait_1080p60.mp4', 'long_720p30_10min.mp4'];
+    final p = await tester.runAsync(() => services.projects.create(name: 'Phone test'));
+    await tester.runAsync(() => services.projects.save(p!.copyWith(media: [
+          for (final (i, name) in names.indexed)
+            MediaRef(
+              id: 'm$i',
+              kind: MediaKind.video,
+              uri: Uri.file(paths[name]!).toString(),
+              displayName: name,
+              durationTicks: 0,
+              needsProbe: true,
+            ),
+        ])));
+    memory('before');
+    await tester.pumpWidget(CutlabApp(services: services));
+    await wait(1500);
+    await tester.tap(find.text('Phone test'));
+    await wait(6000); // probing, thumbnails
+    memory('workspace open');
+    for (var i = 0; i < names.length; i++) {
+      await tester.tap(find.byKey(Key('addToTimeline-m$i')));
+      await wait(1500);
+    }
+    await wait(4000); // timeline thumbnails, waveforms, monitor frames
+    memory('timeline with 4 clips');
+    expect(tester.takeException(), isNull);
+
+    for (final name in names.take(3)) {
+      await tester.tap(find.text(name).first);
+      await wait(2500);
+      final play = find.byKey(const Key('playPause'));
+      if (play.evaluate().isNotEmpty) {
+        await tester.tap(play);
+        await wait(3000);
+      }
+      memory('previewing $name');
+      expect(find.textContaining('Cannot play this file'), findsNothing, reason: name);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pageBack();
+    await wait(2000);
+    memory('after closing the editor');
+    expect(tester.takeException(), isNull);
   });
 }

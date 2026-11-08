@@ -30,8 +30,23 @@ class FakeMediaPlatform implements MediaPlatform {
   @override
   Future<String> openForEngine(String uri) async => uri;
 
+  final List<String> closed = [];
   @override
-  Future<void> closeForEngine(String engineUri) async {}
+  Future<void> closeForEngine(String engineUri) async => closed.add(engineUri);
+
+  HardwareCheck hardwareCheck = const HardwareCheck(ok: true);
+  final List<String> hardwareCheckKeys = [];
+  @override
+  Future<HardwareCheck> checkHardwareDecoding(String uri, String key) async {
+    hardwareCheckKeys.add(key);
+    return hardwareCheck;
+  }
+
+  @override
+  Future<void> resetHardwareChecks() async {}
+
+  @override
+  Future<Map<String, Object?>> deviceInfo() async => {'platform': 'test'};
 
   @override
   Future<bool> saveProjectFile(String suggestedName, String text) async {
@@ -84,7 +99,7 @@ class FakeMediaEngine extends MediaEngine {
   Future<Peaks> peaks(String engineUri, {int bucketsPerSecond = 50}) async => Peaks(bucketsPerSecond, Float32List(20));
 
   @override
-  PreviewPlayer openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) {
+  Future<PreviewPlayer> openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) async {
     final p = FakePlayer(engineUri, hardware);
     players.add(p);
     return p;

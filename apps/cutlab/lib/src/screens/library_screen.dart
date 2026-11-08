@@ -9,6 +9,7 @@ import '../media/media_platform.dart';
 import '../services.dart';
 import '../storage/project_store.dart';
 import '../theme.dart';
+import 'diagnostics_screen.dart';
 import 'dialogs.dart';
 import 'project_settings_form.dart';
 import 'settings_screen.dart';
@@ -36,6 +37,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _refresh();
+    // After a crash: say what happened (once) and point to the details.
+    if (widget.services.diagnostics?.newCrashes.isNotEmpty ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(showCrashNotice(context, widget.services));
+      });
+    }
   }
 
   Future<void> _refresh() async {

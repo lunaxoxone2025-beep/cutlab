@@ -1,7 +1,11 @@
 #include "video_decoder.hpp"
 
+#include "../diag/diag.hpp"
+
 #include <algorithm>
+#include <condition_variable>
 #include <cstring>
+#include <mutex>
 #include <thread>
 
 namespace cutlab::media {
@@ -38,7 +42,45 @@ void fit_within(int w, int h, int max_w, int max_h, int& out_w, int& out_h) {
   out_h = std::max(2, out_h & ~1);
 }
 
+// One-shot decoders (timeline frames, thumbnails) share a pixel budget so
+// several big decodes cannot pile up at once: two 4K pictures, or eight
+// 1080p ones, may be decoding at the same time; the rest wait their turn.
+constexpr int64_t kOneShotBudget = 2LL * 3840 * 2160;
+std::mutex g_budget_mu;
+std::condition_variable g_budget_cv;
+int64_t g_budget_used = 0;
+
+int64_t acquire_budget(int64_t pixels) {
+  pixels = std::min(std::max<int64_t>(pixels, 1), kOneShotBudget);
+  std::unique_lock<std::mutex> lock(g_budget_mu);
+  g_budget_cv.wait(lock, [&] { return g_budget_used + pixels <= kOneShotBudget; });
+  g_budget_used += pixels;
+  return pixels;
+}
+
+void release_budget(int64_t pixels) {
+  if (pixels <= 0) return;
+  {
+    std::lock_guard<std::mutex> lock(g_budget_mu);
+    g_budget_used -= pixels;
+  }
+  g_budget_cv.notify_all();
+}
+
 }  // namespace
+
+int decoder_threads(int width, int height, bool one_shot, unsigned cpus) {
+  const int cores = static_cast<int>(std::max(1u, cpus));
+  const int64_t pixels = static_cast<int64_t>(std::max(1, width)) * std::max(1, height);
+  if (one_shot) return std::min(cores, 2);
+  int cap = 6;
+  if (pixels > 2560 * 1440) {
+    cap = 3;  // 4K and above
+  } else if (pixels > 1920 * 1080) {
+    cap = 4;
+  }
+  return std::max(1, std::min(cores, cap));
+}
 
 VideoDecoder::VideoDecoder(const Source& src, DecodeOptions opts) : demux_(src), opts_(opts) {
   AVFormatContext* fmt = demux_.fmt();
@@ -64,13 +106,30 @@ VideoDecoder::VideoDecoder(const Source& src, DecodeOptions opts) : demux_(src),
   }
   target_slack_ = std::min(pts_to_ticks(1, st_->time_base), default_frame_duration_ / 2);
   pkt_ = make_packet();
-  open_codec(opts_.prefer_hardware);
+  if (opts_.one_shot || opts_.keyframes_only) {
+    budget_ = acquire_budget(static_cast<int64_t>(st_->codecpar->width) * st_->codecpar->height);
+  }
+  try {
+    open_codec(opts_.prefer_hardware);
+  } catch (...) {
+    release_budget(budget_);
+    throw;
+  }
 }
 
 VideoDecoder::~VideoDecoder() {
+  release_codec();
+  if (sws_) sws_freeContext(sws_);
+  release_budget(budget_);
+}
+
+void VideoDecoder::release_codec() {
   ctx_.reset();
   if (hw_device_) av_buffer_unref(&hw_device_);
-  if (sws_) sws_freeContext(sws_);
+  if (hw_counted_) {
+    diag::hardware_decoder_closed();
+    hw_counted_ = false;
+  }
 }
 
 AVPixelFormat VideoDecoder::pick_hw_format(AVCodecContext* ctx, const AVPixelFormat* fmts) {
@@ -87,8 +146,7 @@ AVPixelFormat VideoDecoder::pick_hw_format(AVCodecContext* ctx, const AVPixelFor
 }
 
 void VideoDecoder::open_codec(bool try_hardware) {
-  ctx_.reset();
-  if (hw_device_) av_buffer_unref(&hw_device_);
+  release_codec();
   hw_active_ = false;
   hw_format_ = AV_PIX_FMT_NONE;
 
@@ -131,15 +189,26 @@ void VideoDecoder::open_codec(bool try_hardware) {
     }
   }
 #endif
+  threads_ = 1;
   if (!hw_device_ && !mediacodec) {
-    ctx->thread_count = opts_.threads > 0 ? opts_.threads : std::min(8, static_cast<int>(std::max(1u, std::thread::hardware_concurrency())));
-    ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+    threads_ = opts_.threads > 0 ? opts_.threads
+                                 : decoder_threads(st_->codecpar->width, st_->codecpar->height, opts_.one_shot || opts_.keyframes_only,
+                                                   std::thread::hardware_concurrency());
+    ctx->thread_count = threads_;
+    // Frame threads keep one picture per thread in flight; a few frames
+    // only need slice threads (less memory, no start-up delay).
+    ctx->thread_type = (opts_.one_shot || opts_.keyframes_only) ? FF_THREAD_SLICE : (FF_THREAD_FRAME | FF_THREAD_SLICE);
   }
 
   const int err = avcodec_open2(ctx.get(), codec, nullptr);
   if (err < 0) {
     if (try_hardware && (hw_device_ || mediacodec)) {
-      open_codec(false);  // hardware unavailable for this stream: software decode
+      // Hardware unavailable for this stream: software decode.
+      hw_fallback_ = std::string(codec->name) + " could not start: " + av_error_string(err);
+      diag::note("hardware decoder %s failed to open (%s): using software", codec->name, av_error_string(err).c_str());
+      ctx.reset();
+      if (hw_device_) av_buffer_unref(&hw_device_);
+      open_codec(false);
       return;
     }
     throw MediaError("cannot open decoder " + std::string(codec->name) + ": " + av_error_string(err));
@@ -150,8 +219,22 @@ void VideoDecoder::open_codec(bool try_hardware) {
     const auto* dev = reinterpret_cast<const AVHWDeviceContext*>(hw_device_->data);
     decoder_name_ += std::string(" (") + av_hwdevice_get_type_name(dev->type) + ")";
   }
+  if (hw_active_) {
+    diag::hardware_decoder_opened();
+    hw_counted_ = true;
+  }
   ctx_ = std::move(ctx);
   eof_sent_ = false;
+  if (!opts_.one_shot && !opts_.keyframes_only) {
+    int64_t rss = 0, peak = 0;
+    diag::memory_kib(&rss, &peak);
+    diag::note("decoder %s %s %dx%d %d-bit threads=%d hw=%d rss=%lldMB", decoder_name_.c_str(), avcodec_get_name(st_->codecpar->codec_id),
+               st_->codecpar->width, st_->codecpar->height,
+               av_pix_fmt_desc_get(static_cast<AVPixelFormat>(st_->codecpar->format))
+                   ? av_pix_fmt_desc_get(static_cast<AVPixelFormat>(st_->codecpar->format))->comp[0].depth
+                   : 8,
+               threads_, hw_active_ ? 1 : 0, static_cast<long long>(rss / 1024));
+  }
 }
 
 Ticks VideoDecoder::frame_pts(const AVFrame* f) {
@@ -186,24 +269,33 @@ bool VideoDecoder::pull_raw(FramePtr& out) {
   }
 }
 
-bool VideoDecoder::pull(FramePtr& out) {
-  try {
-    if (!pull_raw(out)) return false;
-  } catch (const MediaError&) {
-    if (!hw_active_) throw;
-    // A hardware decoder failed mid-stream: continue in software from here.
-    const Ticks resume = last_pts_ < 0 ? 0 : last_pts_;
-    open_codec(false);
-    raw_seek(resume);
-    if (!pull_raw(out)) return false;
-  }
+bool VideoDecoder::pull_checked(FramePtr& out) {
+  if (!pull_raw(out)) return false;
   if (out->hw_frames_ctx && out->format == hw_format_) {
     FramePtr sw = make_frame();
     check(av_hwframe_transfer_data(sw.get(), out.get(), 0), "hardware frame download");
     av_frame_copy_props(sw.get(), out.get());
     out = std::move(sw);
   }
+  if (out->width <= 0 || out->height <= 0 || out->format < 0 || !out->data[0]) {
+    throw MediaError("decoder returned an empty picture");
+  }
   return true;
+}
+
+bool VideoDecoder::pull(FramePtr& out) {
+  try {
+    return pull_checked(out);
+  } catch (const MediaError& e) {
+    if (!hw_active_) throw;
+    // A hardware decoder failed mid-stream: continue in software from here.
+    hw_fallback_ = decoder_name_ + " failed while decoding: " + e.what();
+    diag::note("hardware decoder %s failed (%s): switching to software", decoder_name_.c_str(), e.what());
+    const Ticks resume = last_pts_ < 0 ? 0 : last_pts_;
+    open_codec(false);
+    raw_seek(resume);
+    return pull_checked(out);
+  }
 }
 
 void VideoDecoder::raw_seek(Ticks t) {

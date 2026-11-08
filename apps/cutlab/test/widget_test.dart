@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:cutlab/src/app.dart';
+import 'package:cutlab/src/diagnostics/diagnostics.dart';
 import 'package:cutlab/src/format.dart';
 import 'package:cutlab/src/media/media_platform.dart';
 import 'package:cutlab/src/services.dart';
@@ -17,7 +20,7 @@ const desktop = Size(1400, 900);
 const phone = Size(400, 860);
 
 class Harness {
-  Harness({this.engine})
+  Harness({this.engine, Diagnostics? diagnostics})
       : backend = MemoryBackend(),
         media = FakeMediaPlatform() {
     services = AppServices(
@@ -25,6 +28,7 @@ class Harness {
       settingsStore: SettingsStore(MemoryBackend()),
       media: media,
       engine: engine,
+      diagnostics: diagnostics,
     );
   }
 
@@ -251,6 +255,49 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(player.disposed, isTrue);
+  });
+
+  testWidgets('a video whose hardware decoder failed its test plays with software decoding', (tester) async {
+    final engine = FakeMediaEngine();
+    final h = Harness(engine: engine);
+    h.media.hardwareCheck = const HardwareCheck(ok: false, detail: 'the hardware decoder crashed during its test');
+    final p = await h.store.create(name: 'Viewer');
+    await h.store.save(p.copyWith(media: [video('clip.mp4', uri: '/v/clip.mp4').toMediaRef('m1')]));
+    engine.probes['/v/clip.mp4'] = videoProbe(seconds: 30);
+
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Viewer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('clip.mp4'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(h.media.hardwareCheckKeys, ['h264-8bit-1440p60']);
+    expect(engine.players.single.hardware, isFalse);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(engine.players.single.disposed, isTrue);
+    expect(h.media.closed, contains('/v/clip.mp4'), reason: 'the file is released after the viewer closes');
+  });
+
+  testWidgets('after a crash the library says what happened and links to the details', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('cutlab_notice');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}${Platform.pathSeparator}native-crash.txt')
+        .writeAsStringSync('CUTLAB native crash report\nsignal: SIGSEGV\nhardware decoders open: 1\n');
+    final d = Diagnostics(dir, device: const {}, engine: FakeMediaEngine(), media: FakeMediaPlatform(), version: 'test');
+    await tester.runAsync(d.collect);
+    d.settingsAfterCrashes(const AppSettings());
+
+    final h = Harness(diagnostics: d);
+    await h.pump(tester, phone);
+    expect(find.text('CUTLAB closed unexpectedly'), findsOneWidget);
+    expect(find.textContaining('Hardware video decoding was turned off'), findsOneWidget);
+    await tester.tap(find.text('Details'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.byKey(const Key('resetHardwareChecks')), findsOneWidget);
   });
 
   testWidgets('settings: preview quality and hardware decoding reach the player', (tester) async {

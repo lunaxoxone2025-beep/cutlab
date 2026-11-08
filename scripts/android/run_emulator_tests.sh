@@ -30,7 +30,7 @@ adb shell mkdir -p $D/media $D/real
 adb push "$NATIVE/." $D/ >/dev/null
 adb push "$MEDIA/test-media/." $D/media/ >/dev/null
 adb push "$MEDIA/android-media/." $D/real/ >/dev/null
-adb shell chmod 755 $D/cutlab_core_tests $D/cutlab_media_tests $D/cutlab_stress_preview
+adb shell chmod 755 $D/cutlab_core_tests $D/cutlab_media_tests $D/cutlab_stress_preview $D/cutlab_crash_report_tests
 native() {
   local name="$1"; shift
   echo "NATIVE-TEST $name: start" | tee -a "$LOGS/native.txt"
@@ -41,6 +41,7 @@ native() {
 }
 native core ./cutlab_core_tests
 native media CUTLAB_TEST_MEDIA=$D/media ./cutlab_media_tests
+native crash-report ./cutlab_crash_report_tests $D/crash-report-test
 native stress ./cutlab_stress_preview 4 real/h264_1080p30.mp4 real/h264_1080p60.mp4 real/hevc_1080p60.mp4 real/hevc10_4k30.mp4 \
   real/phone_portrait_1080p60.mp4 real/long_720p30_10min.mp4 real/vfr.mkv real/tone.mp3 real/red.png
 tail -40 "$LOGS/native.txt"

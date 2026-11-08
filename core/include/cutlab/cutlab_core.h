@@ -117,8 +117,28 @@ CUTLAB_API int64_t cutlab_player_duration(cutlab_player* p);
 CUTLAB_API int32_t cutlab_player_frame(cutlab_player* p, uint64_t* serial, uint8_t* dst, int64_t capacity, int32_t* out_w,
                                        int32_t* out_h, int64_t* out_pts);
 
-/* JSON playback statistics (decoder, hardware, dropped frames, buffers). */
+/* JSON playback statistics (decoder, hardware, dropped frames, buffers,
+ * hardwareFallback, error, memory). */
 CUTLAB_API cutlab_status cutlab_player_stats(cutlab_player* p, char** out_json);
+
+/* ------------------------------------------------------------ diagnostics */
+
+/* Tries hardware decoding of a file (decodes ~50 frames with seeks).
+ * JSON: {"ok", "decoder", "hardware", "stillHardware", "frames", "fallback"}.
+ * On Android the app runs this in a separate process first, so a broken
+ * vendor decoder cannot take the editor down. */
+CUTLAB_API cutlab_status cutlab_hw_self_test(const char* uri, char** out_json);
+
+/* Installs the native crash handler (reports go to <dir>/native-crash.txt,
+ * with device_info, memory figures, a backtrace and recent engine activity)
+ * and routes FFmpeg warnings into the activity log. */
+CUTLAB_API cutlab_status cutlab_diag_init(const char* dir, const char* device_info);
+
+/* Adds a line to the engine activity log. */
+CUTLAB_API void cutlab_diag_note(const char* text);
+
+/* Recent engine activity plus current memory use (free with cutlab_free). */
+CUTLAB_API cutlab_status cutlab_diag_recent(char** out_text);
 
 #ifdef __cplusplus
 }

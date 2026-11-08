@@ -101,6 +101,33 @@ class ProbeInfo {
   static String _fps(Rational r) => r.den == 1 ? '${r.num}' : r.toDouble().toStringAsFixed(2);
 }
 
+/// Groups videos that a hardware decoder handles alike: codec, bit depth,
+/// size class and frame-rate class ("hevc-10bit-2160p60"). The result of a
+/// hardware decoding check is shared by every video with the same key.
+String hardwareCheckKey(ProbeInfo? info, MediaRef m) {
+  final codec = info?.videoCodec ?? 'unknown';
+  final bits = info?.bitDepth ?? 8;
+  final w = info?.width ?? m.width ?? 0;
+  final h = info?.height ?? m.height ?? 0;
+  final side = w > h ? w : h;
+  final size = side <= 1280
+      ? 720
+      : side <= 1920
+          ? 1080
+          : side <= 2560
+              ? 1440
+              : side <= 3840
+                  ? 2160
+                  : 4320;
+  final fps = (info?.frameRate ?? m.frameRate)?.toDouble() ?? 30;
+  final rate = fps >= 100
+      ? 120
+      : fps >= 48
+          ? 60
+          : 30;
+  return '$codec-${bits}bit-${size}p$rate';
+}
+
 /// A decoded RGBA image (rows of width * 4 bytes).
 class RgbaImage {
   const RgbaImage(this.width, this.height, this.pixels, {this.ptsTicks = 0});
@@ -126,11 +153,12 @@ class Peaks {
 }
 
 class EngineInfo {
-  const EngineInfo({required this.available, this.ffmpegVersion, this.hardwareDecoders = const [], this.reason});
+  const EngineInfo({required this.available, this.ffmpegVersion, this.hardwareDecoders = const [], this.reason, this.cpus = 0});
   final bool available;
   final String? ffmpegVersion;
   final List<String> hardwareDecoders;
   final String? reason;
+  final int cpus;
 }
 
 class MediaEngineException implements Exception {
@@ -141,21 +169,47 @@ class MediaEngineException implements Exception {
 }
 
 class PlayerStats {
-  const PlayerStats({this.decoder = '', this.hardware = false, this.framesDecoded = 0, this.framesDropped = 0, this.audioDevice = false});
+  const PlayerStats({
+    this.decoder = '',
+    this.hardware = false,
+    this.framesDecoded = 0,
+    this.framesDropped = 0,
+    this.audioDevice = false,
+    this.hardwareFallback = '',
+    this.error = '',
+    this.decoderThreads = 0,
+    this.rssKiB = 0,
+    this.peakRssKiB = 0,
+  });
   final String decoder;
   final bool hardware;
   final int framesDecoded;
   final int framesDropped;
   final bool audioDevice;
 
+  /// Why hardware decoding was abandoned for this file ("" = it was not).
+  final String hardwareFallback;
+
+  /// A decoding problem that stopped playback ("" = none).
+  final String error;
+  final int decoderThreads;
+  final int rssKiB;
+  final int peakRssKiB;
+
   factory PlayerStats.fromJson(String text) {
     final j = jsonDecode(text) as Map<String, Object?>;
+    int n(String k) => (j[k] as num?)?.toInt() ?? 0;
     return PlayerStats(
       decoder: j['decoder'] as String? ?? '',
       hardware: j['hardware'] == true,
-      framesDecoded: (j['framesDecoded'] as num?)?.toInt() ?? 0,
-      framesDropped: (j['framesDropped'] as num?)?.toInt() ?? 0,
+      framesDecoded: n('framesDecoded'),
+      framesDropped: n('framesDropped'),
       audioDevice: j['audioDevice'] == true,
+      hardwareFallback: j['hardwareFallback'] as String? ?? '',
+      error: j['error'] as String? ?? '',
+      decoderThreads: n('decoderThreads'),
+      rssKiB: n('rssKiB'),
+      peakRssKiB: n('peakRssKiB'),
     );
   }
 }
@@ -185,7 +239,23 @@ abstract class MediaEngine {
   Future<RgbaImage> frameAt(String engineUri, int ticks, {bool accurate = true, int maxWidth = 640, int maxHeight = 360});
   Future<ThumbnailStrip> thumbnails(String engineUri, int count, {int maxWidth = 160, int maxHeight = 90});
   Future<Peaks> peaks(String engineUri, {int bucketsPerSecond = 50});
-  PreviewPlayer openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true});
+
+  /// Opens a player in the background (opening can take a moment for big
+  /// files and must never block the UI).
+  Future<PreviewPlayer> openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true});
+
+  /// Completes when no engine call is still reading [engineUri], so the
+  /// file descriptor behind it can be closed safely.
+  Future<void> idle(String engineUri) async {}
+
+  /// Installs the native crash handler (reports in [dir]) and FFmpeg logging.
+  void initDiagnostics(String dir, String deviceInfo) {}
+
+  /// Adds a line to the engine activity log (shown in crash reports).
+  void note(String text) {}
+
+  /// Recent engine activity and memory use, for the diagnostics screen.
+  String recentActivity() => '';
 }
 
 /// Used when the native library is missing (e.g. widget tests): every
@@ -208,5 +278,5 @@ class UnavailableMediaEngine extends MediaEngine {
   @override
   Future<Peaks> peaks(String engineUri, {int bucketsPerSecond = 50}) async => _fail();
   @override
-  PreviewPlayer openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) => _fail();
+  Future<PreviewPlayer> openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true}) async => _fail();
 }

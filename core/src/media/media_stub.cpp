@@ -28,5 +28,9 @@ int64_t cutlab_player_position(cutlab_player*) { return 0; }
 int64_t cutlab_player_duration(cutlab_player*) { return 0; }
 int32_t cutlab_player_frame(cutlab_player*, uint64_t*, uint8_t*, int64_t, int32_t*, int32_t*, int64_t*) { return 0; }
 cutlab_status cutlab_player_stats(cutlab_player*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_hw_self_test(const char*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_diag_init(const char*, const char*) { return CUTLAB_ERR_UNAVAILABLE; }
+void cutlab_diag_note(const char*) {}
+cutlab_status cutlab_diag_recent(char**) { return CUTLAB_ERR_UNAVAILABLE; }
 
 }  // extern "C"

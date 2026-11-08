@@ -95,4 +95,21 @@ class DesktopMediaPlatform implements MediaPlatform {
 
   @override
   Future<void> closeForEngine(String engineUri) async {}
+
+  // On PC the engine opens D3D11/DXVA2/VA-API devices itself and falls back
+  // to software when they fail; there is no separate test process.
+  @override
+  Future<HardwareCheck> checkHardwareDecoding(String uri, String key) async => const HardwareCheck(ok: true);
+
+  @override
+  Future<void> resetHardwareChecks() async {}
+
+  @override
+  Future<Map<String, Object?>> deviceInfo() async => {
+        'platform': Platform.operatingSystem,
+        'osVersion': Platform.operatingSystemVersion,
+        'cpus': Platform.numberOfProcessors,
+        'dartVersion': Platform.version.split(' ').first,
+        'locale': Platform.localeName,
+      };
 }
