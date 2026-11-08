@@ -101,7 +101,7 @@ class _Setup extends StatelessWidget {
                 key: Key('exportResolution-$r'),
                 label: Text(resolutionLabel(r)),
                 selected: s.resolution == r,
-                onSelected: (_) => c.update(s.copyWith(resolution: r)),
+                onSelected: (_) => c.update(c.settings.copyWith(resolution: r)),
               ),
           ]),
         ),
@@ -113,7 +113,7 @@ class _Setup extends StatelessWidget {
                 key: Key('exportFps-${r.num}'),
                 label: Text('${r.num} fps'),
                 selected: s.frameRate == r,
-                onSelected: (_) => c.update(s.copyWith(frameRate: r)),
+                onSelected: (_) => c.update(c.settings.copyWith(frameRate: r)),
               ),
           ]),
         ),
@@ -126,14 +126,14 @@ class _Setup extends StatelessWidget {
                   key: Key('exportQuality-${q.name}'),
                   label: Text(q.label),
                   selected: s.bitrateKbps == 0 && s.quality == q,
-                  onSelected: (_) => c.update(s.copyWith(quality: q, bitrateKbps: 0)),
+                  onSelected: (_) => c.update(c.settings.copyWith(quality: q, bitrateKbps: 0)),
                 ),
               if (advanced)
                 ChoiceChip(
                   key: const Key('exportQuality-bitrate'),
                   label: const Text('Fixed bitrate'),
                   selected: s.bitrateKbps > 0,
-                  onSelected: (_) => c.update(s.copyWith(bitrateKbps: s.videoBitrate(w, h) ~/ 1000)),
+                  onSelected: (_) => c.update(c.settings.copyWith(bitrateKbps: s.videoBitrate(w, h) ~/ 1000)),
                 ),
             ]),
             if (advanced && s.bitrateKbps > 0) ...[
@@ -145,7 +145,7 @@ class _Setup extends StatelessWidget {
                 max: 150,
                 divisions: 149,
                 value: (s.bitrateKbps / 1000).clamp(1, 150).toDouble(),
-                onChanged: (v) => c.update(s.copyWith(bitrateKbps: (v * 1000).round())),
+                onChanged: (v) => c.update(c.settings.copyWith(bitrateKbps: (v * 1000).round())),
               ),
             ],
           ]),
@@ -178,7 +178,7 @@ class _Setup extends StatelessWidget {
                       key: const Key('exportContainer'),
                       segments: [for (final k in s.codec.containers) ButtonSegment(value: k, label: Text(k.label))],
                       selected: {s.container},
-                      onSelectionChanged: (v) => c.update(s.copyWith(container: v.first)),
+                      onSelectionChanged: (v) => c.update(c.settings.copyWith(container: v.first)),
                     )),
               _Row(
                   'Encoder effort',
@@ -186,7 +186,7 @@ class _Setup extends StatelessWidget {
                     key: const Key('exportSpeed'),
                     segments: [for (final v in ExportSpeed.values) ButtonSegment(value: v, label: Text(v.label))],
                     selected: {s.speed},
-                    onSelectionChanged: (v) => c.update(s.copyWith(speed: v.first)),
+                    onSelectionChanged: (v) => c.update(c.settings.copyWith(speed: v.first)),
                   )),
               SwitchListTile(
                 key: const Key('exportHardware'),
@@ -194,7 +194,7 @@ class _Setup extends StatelessWidget {
                 title: const Text('Hardware encoding'),
                 subtitle: const Text('Faster and cooler when the device has a working encoder; software is used otherwise.'),
                 value: s.hardware,
-                onChanged: (v) => c.update(s.copyWith(hardware: v)),
+                onChanged: (v) => c.update(c.settings.copyWith(hardware: v)),
               ),
               _Row(
                   'Audio',
@@ -204,7 +204,7 @@ class _Setup extends StatelessWidget {
                     items: [
                       for (final k in const [128, 192, 256, 320]) DropdownMenuItem(value: k, child: Text('$k kbit/s'))
                     ],
-                    onChanged: (v) => c.update(s.copyWith(audioKbps: v)),
+                    onChanged: (v) => c.update(c.settings.copyWith(audioKbps: v)),
                   )),
               _Row(
                   'Keyframe every',
@@ -215,7 +215,7 @@ class _Setup extends StatelessWidget {
                       for (final k in const [0.5, 1.0, 2.0, 5.0])
                         DropdownMenuItem(value: k, child: Text('${k == k.roundToDouble() ? k.round() : k} s'))
                     ],
-                    onChanged: (v) => c.update(s.copyWith(keyframeSeconds: v)),
+                    onChanged: (v) => c.update(c.settings.copyWith(keyframeSeconds: v)),
                   )),
               _Row(
                   'Encoder threads',
@@ -226,7 +226,7 @@ class _Setup extends StatelessWidget {
                       for (final t in const [0, 2, 4, 8])
                         DropdownMenuItem(value: t, child: Text(t == 0 ? 'Automatic' : '$t (cooler, slower)'))
                     ],
-                    onChanged: (v) => c.update(s.copyWith(threads: v)),
+                    onChanged: (v) => c.update(c.settings.copyWith(threads: v)),
                   )),
             ]),
           ),

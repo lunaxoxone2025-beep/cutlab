@@ -861,6 +861,10 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
       const int r = avcodec_receive_packet(ctx, pkt.get());
       if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) return;
       check(r, ctx == venc ? "video encoding" : "audio encoding");
+      if (pkt->size <= 0) {  // nothing to store (some encoders signal the end this way)
+        av_packet_unref(pkt.get());
+        continue;
+      }
       av_packet_rescale_ts(pkt.get(), ctx->time_base, st->time_base);
       pkt->stream_index = st->index;
       check(av_interleaved_write_frame(run.fmt, pkt.get()), "writing the output file");

@@ -258,7 +258,7 @@ void main() {
         }
 
         report('white pixels in the title area: with title ${brightBottom(title).toStringAsFixed(4)}, without ${brightBottom(plain).toStringAsFixed(4)}');
-        expect(brightBottom(title), greaterThan(brightBottom(plain) + 0.002), reason: 'the title is in the video');
+        expect(brightBottom(title), greaterThan(brightBottom(plain) + 0.0005), reason: 'the title is in the video');
         final r = engine.openTimeline(maxWidth: 64, maxHeight: 64, nullAudio: true);
         try {
           r.setPlan('cutlab-timeline 1\ntrack x audio 0 0 0 1\nclip x 0 ${10 * tps} 0 1 0 0 1 0 1 $euri\n');

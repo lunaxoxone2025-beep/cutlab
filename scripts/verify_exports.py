@@ -66,7 +66,12 @@ for name, w, h, fps, frames, vcodec, acodec in entries:
         problems.append("unexpected audio stream")
     decode = subprocess.run([ffmpeg, "-v", "error", "-i", path, "-map", "0", "-f", "null", "-"], capture_output=True, text=True)
     if decode.returncode != 0 or decode.stderr.strip():
-        problems.append("decode errors: " + decode.stderr.strip()[:200])
+        problems.append("decode errors: " + decode.stderr.strip()[:300])
+        # Details for the log: the audio packets (size, time) at both ends.
+        pk = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a", "-show_entries", "packet=pts_time,duration_time,size,flags",
+                             "-of", "csv=p=0", path], capture_output=True, text=True).stdout.strip().splitlines()
+        print(f"{name}: {len(pk)} audio packets; first {pk[:3]}; last {pk[-3:]}")
+        print(f"{name}: decoder said: {decode.stderr.strip()[:1500]}")
     duration = float(info.get("format", {}).get("duration", 0))
     size = int(info.get("format", {}).get("size", 0))
     rows.append((name, f"{video['codec_name'] if video else '-'} {w}x{h}", fps,
