@@ -37,9 +37,17 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ➡️ Persistent thumbnail/waveform cache (SQLite) moves to Phase 9; Phase 3 caches in memory per session
 - ⚠️ Not yet run on the owner's phone/PC: hardware decoding on real devices, preview smoothness at 60/120 fps, audio latency (see `docs/ENGINE.md`, Limitations)
 
-## Phase 4 — Timeline MVP ⬜
+## Phase 4 — Professional timeline ✅ (verified in CI; real-device check pending)
 
-Multi-track timeline widget (virtualized), import → add clips, move, trim (frame-accurate), split, delete, ripple delete, snapping, zoom/scroll, markers, track lock/hide/mute, copy/paste/duplicate, undo/redo commands, touch gestures and keyboard shortcuts.
+- ✅ Independent video, image, audio and text tracks; `.cutlab` format v2 (image tracks, clip fades, links; v1 upgraded automatically)
+- ✅ Add, move (also between tracks), trim start/end, split exactly on a frame, delete, ripple delete (per track), duplicate, copy/cut/paste, photo/title duration — every edit is one undo step
+- ✅ Frame grid for 24/25/29.97/30/50/60/120 fps, magnetic snapping, multi-select, lock/hide/mute tracks, linked clips, separate audio, ±1-frame A/V sync nudge
+- ✅ Volume (0–200 %) and fades stored and drawn; waveforms and thumbnails from the engine with bounded memory
+- ✅ Zoom/scroll; touch gestures on Android (pinch, drag, long-press, trim handles); keyboard shortcuts, mouse wheel and drag & drop of files on Windows
+- ✅ Timeline monitor: exact frame at the playhead plus titles
+- ✅ Pure-Dart edit operations with unit tests (incl. a 2-hour, 300-clip project); widget tests for add/split/delete/undo/save and the phone layout
+- ➡️ Continuous playback of the edited timeline with mixed audio, audible volume/fades/mute, title styling → Phase 5; markers UI → Phase 7; track rename/reorder UI → Phase 5 (see `docs/TIMELINE.md`)
+- ⚠️ Not yet tried on the owner's phone/PC
 
 ## Phase 5 — Core editing ⬜
 
@@ -67,5 +75,5 @@ Final testing on the owner's phone and PC, documentation, stable APK and Windows
 
 ## Exact next step
 
-1. **Owner device check** of the `dev` build: import a long 60 fps recording on the phone and on the PC, scrub, play with sound, step frames; read the decoder line (HW/SW, dropped frames) in the viewer.
-2. **Phase 4, item 1:** the multi-track timeline widget (virtualized) with drag-to-add from the media list, using engine thumbnails and waveforms.
+1. **Owner device check** of the `dev` build: edit a long recording on the phone and on the PC (add, split, trim, move, undo, save, reopen).
+2. **Phase 5, item 1:** native timeline renderer — continuous playback of the edited timeline with all audio tracks mixed (volume, fades, mute audible).

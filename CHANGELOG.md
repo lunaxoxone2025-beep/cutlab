@@ -1,5 +1,14 @@
 # Changelog
 
+## CUTLAB dev 0.4 — Phase 4 (2026-11-08)
+
+- Multitrack timeline: video, image, audio and text tracks; add, move, trim, split on the exact frame, delete/ripple delete, duplicate, copy/cut/paste, photo/title duration.
+- Snapping, multi-select, lock/hide/mute tracks, linked clips, separate audio from video, ±1-frame sync nudge, undo/redo for every edit.
+- Volume and fades per clip (stored and drawn; audible from Phase 5), waveforms and thumbnails on the timeline.
+- Touch gestures on Android; keyboard shortcuts, mouse wheel and drag & drop of files on Windows.
+- Timeline monitor showing the exact frame at the playhead and titles.
+- `.cutlab` format v2 (v1 projects upgrade automatically).
+
 ## CUTLAB dev 0.3 — Phase 3 (2026-11-08)
 
 - Native media engine (C++, FFmpeg 8.1 LGPL, miniaudio): probe, frame-accurate decoding, fast scrubbing, thumbnails, waveforms, hardware decoding with software fallback.
