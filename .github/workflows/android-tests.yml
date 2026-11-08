@@ -1,0 +1,157 @@
+name: Android tests
+
+# Runs the media engine and the preview pipeline on Android emulators
+# (x86_64 with KVM): the native engine tests and stress test as plain
+# executables, then the Flutter integration test inside the real app
+# (MainActivity, JNI_OnLoad, MediaCodec through FFmpeg, dart:ffi, Flutter
+# rendering) on real-size H.264/HEVC/4K/portrait/long/broken files.
+#
+# Emulators cannot run the arm64 APK and use Google's software MediaCodec
+# codecs instead of a phone's vendor decoders; see docs/ANDROID_TESTING.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/cutlab/**'
+      - 'core/**'
+      - 'scripts/**'
+      - '.github/workflows/android-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+  FLUTTER_ORG: com.lunaxoxone.studio
+
+jobs:
+  engine:
+    name: Engine for Android x86_64 + test media
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate NDK
+        id: ndk
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          VER=$(grep -m1 Pkg.Revision "$NDK/source.properties" | cut -d= -f2 | tr -d ' ')
+          echo "home=$NDK" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y nasm ffmpeg
+      - id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-android-x86_64
+          key: ffmpeg-android-x86_64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
+      - name: Build FFmpeg for Android x86_64
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.home }}
+        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-x86_64 build/ffmpeg-android-x86_64
+      - name: Build engine and native tests
+        run: |
+          NDK="${{ steps.ndk.outputs.home }}"
+          cmake -S core -B build/core-x86_64 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static \
+            -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-android-x86_64 -DCUTLAB_BUILD_TESTS=ON
+          cmake --build build/core-x86_64 -j 4
+          mkdir -p dist/native
+          cp build/core-x86_64/libcutlab_core.so build/core-x86_64/cutlab_media_tests build/core-x86_64/cutlab_stress_preview build/core-x86_64/cutlab_core_tests dist/native/
+      - id: mediacache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/test-media
+            build/android-media
+          key: android-media-${{ hashFiles('scripts/make_test_media.sh', 'scripts/make_android_test_media.sh') }}
+      - name: Test media
+        if: steps.mediacache.outputs.cache-hit != 'true'
+        run: |
+          scripts/make_test_media.sh build/test-media
+          scripts/make_android_test_media.sh build/android-media
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-x86_64-engine
+          path: dist/native
+          retention-days: 5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-test-media
+          path: |
+            build/test-media
+            build/android-media
+          retention-days: 5
+
+  emulator:
+    name: Emulator API ${{ matrix.api }}
+    needs: engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 34]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-x86_64-engine
+          path: build/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-test-media
+          path: build/media
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prepare the app (engine + test media as test-only assets)
+        working-directory: apps/cutlab
+        run: |
+          flutter create --platforms=android --org "$FLUTTER_ORG" --project-name cutlab .
+          cp -R platform_overlay/android/. android/
+          python3 ../../scripts/android/patch_android_project.py android
+          mkdir -p android/app/src/main/jniLibs/x86_64
+          cp "$GITHUB_WORKSPACE/build/native/libcutlab_core.so" android/app/src/main/jniLibs/x86_64/
+          mkdir -p integration_test/media
+          cp "$GITHUB_WORKSPACE"/build/media/android-media/* integration_test/media/
+          printf '  assets:\n    - integration_test/media/\n' >> pubspec.yaml
+          tail -5 pubspec.yaml
+          flutter pub get
+      - name: Run on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.api >= 30 && 'google_apis' || 'default' }}
+          ram-size: 4096M
+          disk-size: 6000M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/android/run_emulator_tests.sh build/native build/media apps/cutlab build/emulator-logs
+      - name: Results
+        if: always()
+        run: |
+          grep -h "PREVIEW-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          echo "--- crashes in logcat ---"
+          grep -h -E "F DEBUG|FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|cutlab-crash" build/emulator-logs/logcat.txt 2>/dev/null | head -80 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-logs-api${{ matrix.api }}
+          path: build/emulator-logs
+          retention-days: 10

@@ -3,7 +3,7 @@
 #
 #   scripts/ffmpeg/build_ffmpeg.sh <target> <prefix>
 #
-# target: linux-x64 | android-arm64
+# target: linux-x64 | android-arm64 | android-x86_64 (emulator tests)
 # prefix: install directory (gets include/ and lib/)
 #
 # Only demuxers, decoders and parsers needed to *read* common recordings are
@@ -61,6 +61,23 @@ case "$TARGET" in
       "--ar=$TOOLCHAIN/bin/llvm-ar" "--nm=$TOOLCHAIN/bin/llvm-nm"
       "--ranlib=$TOOLCHAIN/bin/llvm-ranlib" "--strip=$TOOLCHAIN/bin/llvm-strip"
       --enable-neon --enable-asm --enable-inline-asm
+      --enable-jni --enable-mediacodec
+      --enable-decoder=h264_mediacodec,hevc_mediacodec,vp9_mediacodec,av1_mediacodec,mpeg4_mediacodec
+    )
+    ;;
+  android-x86_64)
+    # Only for the Android emulator tests in CI (x86_64 emulators run with KVM).
+    : "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME}"
+    API=24
+    TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+    EXTRA=(
+      --target-os=android --arch=x86_64 --enable-cross-compile
+      "--sysroot=$TOOLCHAIN/sysroot"
+      "--cc=$TOOLCHAIN/bin/x86_64-linux-android$API-clang"
+      "--cxx=$TOOLCHAIN/bin/x86_64-linux-android$API-clang++"
+      "--ar=$TOOLCHAIN/bin/llvm-ar" "--nm=$TOOLCHAIN/bin/llvm-nm"
+      "--ranlib=$TOOLCHAIN/bin/llvm-ranlib" "--strip=$TOOLCHAIN/bin/llvm-strip"
+      --enable-asm --x86asmexe=nasm
       --enable-jni --enable-mediacodec
       --enable-decoder=h264_mediacodec,hevc_mediacodec,vp9_mediacodec,av1_mediacodec,mpeg4_mediacodec
     )
