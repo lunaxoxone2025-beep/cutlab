@@ -221,7 +221,8 @@ class _FadeSliderState extends State<_FadeSlider> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${widget.label} ${(_v / ticksPerSecond).toStringAsFixed(2)} s', style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
+        Text('${widget.label} ${(_v / ticksPerSecond).toStringAsFixed(2)} s',
+            style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
         Slider(
           value: _v.clamp(0.0, max <= 0 ? 0.0 : max),
           max: max <= 0 ? 1 : max,

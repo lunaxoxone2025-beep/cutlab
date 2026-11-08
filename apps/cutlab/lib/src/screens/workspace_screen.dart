@@ -294,8 +294,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 ),
               ),
               actions: [
-                IconButton(key: const Key('undo'), tooltip: 'Undo (Ctrl+Z)', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
-                IconButton(key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
+                IconButton(
+                    key: const Key('undo'), tooltip: 'Undo (Ctrl+Z)', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
+                IconButton(
+                    key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
                 _SaveButton(state: c.saveState, onSave: _save),
                 if (wide)
                   Padding(

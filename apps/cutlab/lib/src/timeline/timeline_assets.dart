@@ -26,8 +26,7 @@ class TimelineAssets extends ChangeNotifier {
 
   /// A path / "fd:N" the engine can read, opened once per media file and
   /// closed when the workspace closes.
-  Future<String> engineUri(MediaRef m) =>
-      _engineUris.putIfAbsent('${m.id}|${m.uri}', () => controller.media.openForEngine(m.uri));
+  Future<String> engineUri(MediaRef m) => _engineUris.putIfAbsent('${m.id}|${m.uri}', () => controller.media.openForEngine(m.uri));
 
   /// Thumbnails (pts, image) sorted by pts, or null while loading.
   List<(int, ui.Image)>? thumbnails(MediaRef m) {

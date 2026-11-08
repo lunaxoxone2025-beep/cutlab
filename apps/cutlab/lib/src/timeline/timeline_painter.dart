@@ -60,15 +60,21 @@ class TimelinePainter extends CustomPainter {
     final guide = state.snapGuide;
     if (guide != null) {
       final x = state.xOf(guide);
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), Paint()
-        ..color = const Color(0xFFFFD54F)
-        ..strokeWidth = 1);
+      canvas.drawLine(
+          Offset(x, 0),
+          Offset(x, size.height),
+          Paint()
+            ..color = const Color(0xFFFFD54F)
+            ..strokeWidth = 1);
     }
     final px = state.xOf(state.playhead);
     if (px >= -2 && px <= size.width + 2) {
-      canvas.drawLine(Offset(px, 0), Offset(px, size.height), Paint()
-        ..color = Colors.white
-        ..strokeWidth = 2);
+      canvas.drawLine(
+          Offset(px, 0),
+          Offset(px, size.height),
+          Paint()
+            ..color = Colors.white
+            ..strokeWidth = 2);
       final head = Path()
         ..moveTo(px - 7, 0)
         ..lineTo(px + 7, 0)
@@ -114,9 +120,8 @@ class TimelinePainter extends CustomPainter {
     // Label.
     final label = m?.displayName ?? (c.data['text'] as String? ?? 'Text');
     final link = c.linkId != null ? '\u{1F517} ' : '';
-    final vol = (r.track.kind == TrackKind.audio || r.track.kind == TrackKind.video) && c.volume != 1.0
-        ? '  ${(c.volume * 100).round()}%'
-        : '';
+    final vol =
+        (r.track.kind == TrackKind.audio || r.track.kind == TrackKind.video) && c.volume != 1.0 ? '  ${(c.volume * 100).round()}%' : '';
     final tp = TextPainter(
       text: TextSpan(
         text: '$link$label$vol',
@@ -140,8 +145,7 @@ class TimelinePainter extends CustomPainter {
       if (!r.track.locked) {
         final hp = Paint()..color = Colors.white;
         canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(rect.left, rect.top, 6, rect.height), const Radius.circular(3)), hp);
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(Rect.fromLTWH(rect.right - 6, rect.top, 6, rect.height), const Radius.circular(3)), hp);
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(rect.right - 6, rect.top, 6, rect.height), const Radius.circular(3)), hp);
       }
     }
   }
@@ -261,6 +265,5 @@ class TimelinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(TimelinePainter old) =>
-      old.project != project || old.state != state || old.assets != assets || old.rows != rows;
+  bool shouldRepaint(TimelinePainter old) => old.project != project || old.state != state || old.assets != assets || old.rows != rows;
 }

@@ -172,7 +172,8 @@ class _ProgramMonitorState extends State<ProgramMonitor> {
                       Center(
                         child: Padding(
                           padding: const EdgeInsets.all(CutlabSpacing.md),
-                          child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
+                          child: Text(_error!,
+                              textAlign: TextAlign.center, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
                         ),
                       ),
                     if (p.durationTicks == 0)
@@ -189,7 +190,8 @@ class _ProgramMonitorState extends State<ProgramMonitor> {
                             titles.join('\n'),
                             key: const Key('monitorTitles'),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, shadows: [Shadow(blurRadius: 6)]),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, shadows: [Shadow(blurRadius: 6)]),
                           ),
                         ),
                       ),

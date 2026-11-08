@@ -68,10 +68,13 @@ class TimelineToolbar extends StatelessWidget {
                     children: [
                       b('tlSplit', Icons.content_cut, 'Split at playhead (S)', p.durationTicks > 0 ? actions.split : null),
                       b('tlDelete', Icons.delete_outline, 'Delete (Del)', sel ? () => actions.delete() : null),
-                      if (advanced) b('tlRipple', Icons.format_indent_decrease, 'Ripple delete (Shift+Del)', sel ? () => actions.delete(ripple: true) : null),
+                      if (advanced)
+                        b('tlRipple', Icons.format_indent_decrease, 'Ripple delete (Shift+Del)',
+                            sel ? () => actions.delete(ripple: true) : null),
                       b('tlDuplicate', Icons.copy_all_outlined, 'Duplicate (Ctrl+D)', sel ? actions.duplicate : null),
                       b('tlCopy', Icons.content_copy, 'Copy (Ctrl+C)', sel ? actions.copy : null),
-                      b('tlPaste', Icons.content_paste, 'Paste at playhead (Ctrl+V)', (state.clipboard?.isEmpty ?? true) ? null : actions.paste),
+                      b('tlPaste', Icons.content_paste, 'Paste at playhead (Ctrl+V)',
+                          (state.clipboard?.isEmpty ?? true) ? null : actions.paste),
                       b('tlClip', Icons.tune, 'Clip settings: volume, fades, duration, text', sel ? onClipSettings : null),
                       b('tlDetach', Icons.call_split, 'Separate audio from video', canDetach ? actions.detachAudio : null),
                       if (advanced) b('tlUnlink', Icons.link_off, 'Unlink', linked ? actions.unlink : null),
