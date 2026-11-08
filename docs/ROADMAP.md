@@ -25,14 +25,17 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ✅ Installable builds: Android APK, Windows zip, Linux tarball on the rolling `dev` release
 - ➡️ Keyboard shortcuts and a dedicated landscape-tablet layout move to Phase 4, where the timeline needs them (tablets already get the desktop layout from 1000 px wide)
 
-## Phase 3 — Media engine ⬜
+## Phase 3 — Media engine ✅ (verified in CI; real-device check pending)
 
-1. LGPL FFmpeg build in CI for Android and Windows/Linux (+ attribution file)
-2. `core/media`: probe (duration, streams, time base, VFR detection), demux, decode, seek-to-frame; fill `needsProbe` media on PC
-3. Android MediaCodec decode path; desktop hardware decode where available
-4. Thumbnail strips and waveform peaks in background, cached per device (SQLite)
-5. CPU compositor + Flutter `Texture` preview; audio playback with A/V sync
-6. `ffigen` bindings to the C ABI
+- ✅ FFmpeg 8.1 (LGPL): minimal static build from source for Android arm64 (with MediaCodec) and Linux; prebuilt shared DLLs on Windows x64
+- ✅ `core/media`: probe (duration, streams, rotation, frame rate, **VFR detection**, bit depth, audio format), demux by path or Android file descriptor (no copies), frame-accurate and fast seek, RGBA conversion with correct colour matrices
+- ✅ Hardware decoding with automatic software fallback: MediaCodec (Android), D3D11VA/DXVA2 (Windows — DXVA2 exercised on the Windows CI runner)
+- ✅ Keyframe thumbnail strips and waveform peaks (2-hour file: 24 thumbnails ≈ 20 ms, waveform ≈ 1 s)
+- ✅ Player: audio-clock A/V sync (miniaudio), bounded memory, scrubbing, frame stepping; CPU preview in Flutter at 360p–1080p
+- ✅ dart:ffi bindings (hand-written; the C ABI is small), probing on import and on open, engine thumbnails, source viewer, preview settings
+- ✅ 155 engine checks on Linux and Windows CI (2-hour file, 60/120 fps, VFR, rotation, 10-bit HEVC, A/V timing) + ASan/UBSan locally; Dart unit and widget tests for the integration
+- ➡️ Persistent thumbnail/waveform cache (SQLite) moves to Phase 9; Phase 3 caches in memory per session
+- ⚠️ Not yet run on the owner's phone/PC: hardware decoding on real devices, preview smoothness at 60/120 fps, audio latency (see `docs/ENGINE.md`, Limitations)
 
 ## Phase 4 — Timeline MVP ⬜
 
@@ -64,4 +67,5 @@ Final testing on the owner's phone and PC, documentation, stable APK and Windows
 
 ## Exact next step
 
-**Phase 3, items 1–2:** build LGPL FFmpeg for Android (arm64) and Windows/Linux x64 in CI and implement `core/media` probing behind the C ABI, so imported PC media gets real duration and dimensions and Android probing moves to the shared engine.
+1. **Owner device check** of the `dev` build: import a long 60 fps recording on the phone and on the PC, scrub, play with sound, step frames; read the decoder line (HW/SW, dropped frames) in the viewer.
+2. **Phase 4, item 1:** the multi-track timeline widget (virtualized) with drag-to-add from the media list, using engine thumbnails and waveforms.
