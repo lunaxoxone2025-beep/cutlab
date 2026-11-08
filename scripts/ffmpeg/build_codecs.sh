@@ -52,8 +52,10 @@ case "$TARGET" in
     if [ "$TARGET" = android-arm64 ]; then ABI=arm64-v8a; TRIPLE=aarch64-linux-android; else ABI=x86_64; TRIPLE=x86_64-linux-android; fi
     CC="$TC/bin/$TRIPLE$API-clang"; CXX="$TC/bin/$TRIPLE$API-clang++"
     AR="$TC/bin/llvm-ar"; RANLIB="$TC/bin/llvm-ranlib"; STRIP="$TC/bin/llvm-strip"
+    # Bionic has pthreads in libc; FindThreads' test program does not always
+    # link with the NDK toolchain under CMake 4, so tell it directly.
     CMAKE_TC=(-DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" -DANDROID_ABI=$ABI
-      -DANDROID_PLATFORM=android-$API -DANDROID_STL=c++_static)
+      -DANDROID_PLATFORM=android-$API -DANDROID_STL=c++_static -DCMAKE_HAVE_LIBC_PTHREAD=ON -DCMAKE_THREAD_LIBS_INIT=)
     ;;
   *)
     echo "unknown target $TARGET" >&2
@@ -66,7 +68,8 @@ CFLAGS_COMMON="-O2 -fPIC"
 cmake_build() {  # srcdir builddir args...
   local src=$1 bld=$2
   shift 2
-  cmake -S "$src" -B "$bld" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
+  # The toolchain file picks the compilers (CC/CXX are for the Makefile builds).
+  env -u CC -u CXX -u AR -u RANLIB cmake -S "$src" -B "$bld" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF "${CMAKE_TC[@]}" "$@"
   cmake --build "$bld" -j "$JOBS"
   cmake --install "$bld"
