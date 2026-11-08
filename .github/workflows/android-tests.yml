@@ -143,6 +143,8 @@ jobs:
       - name: Download Gradle (retries; github.com downloads sometimes fail with 5xx)
         working-directory: apps/cutlab/android
         run: |
+          if [ ! -f gradlew ]; then flutter build apk --debug --config-only || true; fi
+          chmod +x gradlew
           for attempt in 1 2 3 4 5; do
             ./gradlew --version && break
             [ $attempt -lt 5 ] || exit 1
