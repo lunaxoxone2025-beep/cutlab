@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
 import 'package:flutter/material.dart';
 
@@ -109,9 +111,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       controller.dispose();
       return;
     }
-    await Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => WorkspaceScreen(controller: controller, settings: widget.services.settings)));
-    await controller.close();
+    // The workspace closes (saves and disposes) the controller when it is
+    // removed, after its exit animation; wait for that here.
+    unawaited(Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => WorkspaceScreen(controller: controller, settings: widget.services.settings))));
+    await controller.closed;
     await _refresh();
   }
 

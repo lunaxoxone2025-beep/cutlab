@@ -292,6 +292,13 @@ class EditorController extends ChangeNotifier {
   }
 
   Future<void>? _closing;
+  final Completer<void> _closed = Completer<void>();
+
+  /// Completes once [close] has finished (saved and disposed). Lets the
+  /// screen that opened the editor wait for the workspace to close the
+  /// controller itself, after its exit animation, instead of disposing it
+  /// while the workspace is still on screen.
+  Future<void> get closed => _closed.future;
 
   /// Saves pending changes (if any) and disposes the controller. Safe to
   /// call more than once; every caller gets the same future.
@@ -305,6 +312,7 @@ class EditorController extends ChangeNotifier {
           }
         }
         dispose();
+        if (!_closed.isCompleted) _closed.complete();
       }();
 
   Future<Uint8List?> _loadThumbnail(MediaRef m) async {
