@@ -76,6 +76,7 @@ class EditorController extends ChangeNotifier {
 
   /// Applies [change] as one undoable step.
   void edit(Project Function(Project p) change) {
+    commitLive();
     final next = change(_project);
     if (identical(next, _project)) return;
     _undo.add(_project);
@@ -84,7 +85,31 @@ class EditorController extends ChangeNotifier {
     _setProject(next.copyWith(modifiedAt: _clock().toUtc()));
   }
 
+  Project? _liveBase;
+
+  /// Applies [change] at once during a gesture (e.g. a volume slider being
+  /// dragged, so the change is heard while dragging). [commitLive] turns all
+  /// live changes since the gesture began into one undoable step.
+  void editLive(Project Function(Project p) change) {
+    final next = change(_project);
+    if (identical(next, _project)) return;
+    _liveBase ??= _project;
+    _setProject(next);
+  }
+
+  void commitLive() {
+    final base = _liveBase;
+    if (base == null) return;
+    _liveBase = null;
+    if (identical(base, _project)) return;
+    _undo.add(base);
+    if (_undo.length > historyLimit) _undo.removeAt(0);
+    _redo.clear();
+    _setProject(_project.copyWith(modifiedAt: _clock().toUtc()));
+  }
+
   void undo() {
+    commitLive();
     if (_undo.isEmpty) return;
     _redo.add(_project);
     _setProject(_undo.removeLast());

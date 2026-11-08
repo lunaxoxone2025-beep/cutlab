@@ -30,7 +30,8 @@ adb shell mkdir -p $D/media $D/real
 adb push "$NATIVE/." $D/ >/dev/null
 adb push "$MEDIA/test-media/." $D/media/ >/dev/null
 adb push "$MEDIA/android-media/." $D/real/ >/dev/null
-adb shell chmod 755 $D/cutlab_core_tests $D/cutlab_media_tests $D/cutlab_stress_preview $D/cutlab_crash_report_tests
+adb shell chmod 755 $D/cutlab_core_tests $D/cutlab_media_tests $D/cutlab_stress_preview $D/cutlab_crash_report_tests \
+  $D/cutlab_timeline_tests $D/cutlab_bench_timeline
 native() {
   local name="$1"; shift
   echo "NATIVE-TEST $name: start" | tee -a "$LOGS/native.txt"
@@ -41,6 +42,8 @@ native() {
 }
 native core ./cutlab_core_tests
 native media CUTLAB_TEST_MEDIA=$D/media ./cutlab_media_tests
+native timeline CUTLAB_TEST_MEDIA=$D/media ./cutlab_timeline_tests
+native bench ./cutlab_bench_timeline $D/media $D/real
 native crash-report ./cutlab_crash_report_tests $D/crash-report-test
 # That test crashes on purpose: drop its tombstones so real ones stand out.
 adb shell 'rm -f /data/tombstones/*' >/dev/null 2>&1 || true
@@ -51,6 +54,8 @@ tail -40 "$LOGS/native.txt"
 # --- Flutter integration test inside the real app
 DEVICE=$(adb devices | awk 'NR==2 {print $1}')
 ( cd "$APP" && flutter test integration_test/preview_pipeline_test.dart -d "$DEVICE" --reporter expanded ) 2>&1 | tee "$LOGS/flutter.txt"
+[ "${PIPESTATUS[0]}" -eq 0 ] || status=1
+( cd "$APP" && flutter test integration_test/timeline_playback_test.dart -d "$DEVICE" --reporter expanded ) 2>&1 | tee "$LOGS/flutter-playback.txt"
 [ "${PIPESTATUS[0]}" -eq 0 ] || status=1
 
 sleep 2

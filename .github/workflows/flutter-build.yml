@@ -26,7 +26,7 @@ env:
   FLUTTER_VERSION: '3.24.5'
   # Distinct from CutLab Lite (com.lunaxoxone.cutlab) so both can be installed side by side.
   FLUTTER_ORG: com.lunaxoxone.studio
-  BUILD_NAME: 0.4.${{ github.run_number }}
+  BUILD_NAME: 0.5.${{ github.run_number }}
 
 jobs:
   android:

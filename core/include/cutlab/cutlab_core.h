@@ -121,6 +121,45 @@ CUTLAB_API int32_t cutlab_player_frame(cutlab_player* p, uint64_t* serial, uint8
  * hardwareFallback, error, memory). */
 CUTLAB_API cutlab_status cutlab_player_stats(cutlab_player* p, char** out_json);
 
+/* --------------------------------------------------------------- timeline */
+
+/* Real-time playback of an edited timeline: picture of the top-most visible
+ * clip, all audible clips mixed (clip volume × fades × track volume, mute,
+ * solo, master), clocked by the audio device. See docs/PLAYBACK.md. */
+typedef struct cutlab_timeline cutlab_timeline;
+
+/* flags: CUTLAB_PLAYER_NULL_AUDIO (no sound device; tests). */
+CUTLAB_API cutlab_status cutlab_timeline_open(int32_t max_w, int32_t max_h, int32_t flags, cutlab_timeline** out);
+CUTLAB_API void cutlab_timeline_close(cutlab_timeline* t);
+
+/* Replaces what is played (plan text, see docs/PLAYBACK.md). Playback goes
+ * on; mix-only changes do not disturb the picture. */
+CUTLAB_API cutlab_status cutlab_timeline_set_plan(cutlab_timeline* t, const char* plan);
+CUTLAB_API void cutlab_timeline_play(cutlab_timeline* t);
+CUTLAB_API void cutlab_timeline_pause(cutlab_timeline* t);
+CUTLAB_API int32_t cutlab_timeline_playing(cutlab_timeline* t);
+CUTLAB_API void cutlab_timeline_seek(cutlab_timeline* t, int64_t ticks, int32_t accurate);
+CUTLAB_API int64_t cutlab_timeline_position(cutlab_timeline* t);
+CUTLAB_API int64_t cutlab_timeline_duration(cutlab_timeline* t);
+
+/* Like cutlab_player_frame; out_w = out_h = 0 with return 1 means black. */
+CUTLAB_API int32_t cutlab_timeline_frame(cutlab_timeline* t, uint64_t* serial, uint8_t* dst, int64_t capacity, int32_t* out_w,
+                                         int32_t* out_h, int64_t* out_pts);
+
+/* Peak levels of what is heard now: one per track (plan order), then the
+ * master. Returns the number written. */
+CUTLAB_API int32_t cutlab_timeline_levels(cutlab_timeline* t, float* out, int32_t capacity);
+
+/* JSON: position, underruns, A/V lateness, audio clock drift, mixer load,
+ * decoders, dropped frames, errors. */
+CUTLAB_API cutlab_status cutlab_timeline_stats(cutlab_timeline* t, char** out_json);
+
+/* Renders the mix offline (no device, independent of playback): `frames`
+ * stereo frames at 48 kHz from start_ticks into out (frames * 2 floats).
+ * peaks (optional): per track then master. For tests and export. */
+CUTLAB_API cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_ticks, int32_t frames, float* out, float* peaks,
+                                                      int32_t peaks_capacity);
+
 /* ------------------------------------------------------------ diagnostics */
 
 /* Tries hardware decoding of a file (decodes ~50 frames with seeks).

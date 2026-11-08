@@ -13,7 +13,7 @@ import 'storage/app_settings.dart';
 import 'storage/project_store.dart';
 import 'storage/store_backend.dart';
 
-const appVersion = '0.4.2';
+const appVersion = '0.5.0';
 
 /// Everything the UI needs from the outside world. Tests build it with
 /// in-memory storage and a fake media platform.

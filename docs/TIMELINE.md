@@ -5,7 +5,7 @@
 ### Tracks
 - Independent **video**, **image**, **audio** and **text** tracks. Clips only go on tracks of their kind (video files → video tracks, photos → image tracks, sound → audio tracks, titles → text tracks). The editor creates a new track automatically when a spot is taken.
 - Stacking: higher picture tracks cover lower ones (titles on top). The monitor shows the top-most visible picture.
-- Per-track **lock** (no edits possible), **hide** (picture not shown), **mute** (stored; audible from Phase 5), rename/reorder via the model, **add track** (advanced mode toolbar).
+- Per-track **lock** (no edits possible), **hide** (picture not shown), **mute** (heard in playback since Phase 5), rename/reorder via the model, **add track** (advanced mode toolbar).
 
 ### Clip editing (every operation is one undo step)
 | Operation | How |
@@ -52,8 +52,8 @@ All edits are part of the `.cutlab` project (format **v2**: image tracks, clip f
 
 | Item | Status |
 |---|---|
-| **Continuous playback of the edited timeline** with all tracks mixed | Phase 5 (native timeline renderer). Today: frame-accurate stills at the playhead in the Timeline monitor; a single file plays with sound in the Source monitor. |
-| Volume, fades and track mute **audible** | Stored and drawn now; heard in timeline playback (Phase 5) and in export (Phase 6). |
+| ~~Continuous playback with all tracks mixed~~ | **Done in Phase 5**, see `docs/PLAYBACK.md`. |
+| ~~Volume, fades and track mute audible~~ | **Done in Phase 5** (also track volume, solo, master volume). Export: Phase 6. |
 | Title styling (font, colour, position, animation) | Phase 5. Titles show as plain centred text in the monitor. |
 | Speed changes, transitions, effects, keyframes | Phase 5 (the model already stores them). |
 | Ripple delete across all tracks / ripple trim | Ripple delete works per track; full ripple editing is planned with the timeline renderer. |

@@ -29,6 +29,19 @@ int64_t cutlab_player_duration(cutlab_player*) { return 0; }
 int32_t cutlab_player_frame(cutlab_player*, uint64_t*, uint8_t*, int64_t, int32_t*, int32_t*, int64_t*) { return 0; }
 cutlab_status cutlab_player_stats(cutlab_player*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
 cutlab_status cutlab_hw_self_test(const char*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_timeline_open(int32_t, int32_t, int32_t, cutlab_timeline**) { return CUTLAB_ERR_UNAVAILABLE; }
+void cutlab_timeline_close(cutlab_timeline*) {}
+cutlab_status cutlab_timeline_set_plan(cutlab_timeline*, const char*) { return CUTLAB_ERR_UNAVAILABLE; }
+void cutlab_timeline_play(cutlab_timeline*) {}
+void cutlab_timeline_pause(cutlab_timeline*) {}
+int32_t cutlab_timeline_playing(cutlab_timeline*) { return 0; }
+void cutlab_timeline_seek(cutlab_timeline*, int64_t, int32_t) {}
+int64_t cutlab_timeline_position(cutlab_timeline*) { return 0; }
+int64_t cutlab_timeline_duration(cutlab_timeline*) { return 0; }
+int32_t cutlab_timeline_frame(cutlab_timeline*, uint64_t*, uint8_t*, int64_t, int32_t*, int32_t*, int64_t*) { return 0; }
+int32_t cutlab_timeline_levels(cutlab_timeline*, float*, int32_t) { return 0; }
+cutlab_status cutlab_timeline_stats(cutlab_timeline*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_timeline_render_audio(cutlab_timeline*, int64_t, int32_t, float*, float*, int32_t) { return CUTLAB_ERR_UNAVAILABLE; }
 cutlab_status cutlab_diag_init(const char*, const char*) { return CUTLAB_ERR_UNAVAILABLE; }
 void cutlab_diag_note(const char*) {}
 cutlab_status cutlab_diag_recent(char**) { return CUTLAB_ERR_UNAVAILABLE; }

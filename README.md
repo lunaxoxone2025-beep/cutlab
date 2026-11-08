@@ -17,7 +17,7 @@ Both Android apps can be installed side by side. Newer builds install over older
 
 ## Status
 
-**CUTLAB** — Phase 4 of 10: project library with autosave/recovery, media import without copying files, a native FFmpeg media engine, and a multitrack timeline (split, trim, move, snapping, linked audio, undo/redo, touch and keyboard controls). Timeline playback with mixed audio and export arrive in Phases 5–6 ([roadmap](docs/ROADMAP.md), [timeline](docs/TIMELINE.md), [engine](docs/ENGINE.md)). Until then, **CutLab Lite** (`apps/web/`) remains the editor for finished videos.
+**CUTLAB** — Phase 5 of 10: project library with autosave/recovery, media import without copying files, native FFmpeg media engine, multitrack timeline, and real-time timeline playback with an audio mixer (volume, mute, solo, fades, meters, audio-clocked sync). Export arrives in Phase 6 ([roadmap](docs/ROADMAP.md), [playback](docs/PLAYBACK.md), [timeline](docs/TIMELINE.md), [engine](docs/ENGINE.md)).
 
 Android build: arm64, Android 7.0 or newer.
 

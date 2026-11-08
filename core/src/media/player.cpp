@@ -5,7 +5,6 @@
 
 #include "../diag/diag.hpp"
 #include "json.hpp"
-#include "miniaudio.h"
 
 namespace cutlab::media {
 
@@ -19,53 +18,6 @@ Ticks since(Clock::time_point t0, Clock::time_point t1) {
   return mul_div(ns, kTicksPerSecond, 1'000'000'000, Rounding::Down);
 }
 }  // namespace
-
-// miniaudio device wrapper (kept out of the header).
-struct Player::AudioOut {
-  ma_context context{};
-  bool context_ok = false;
-  ma_device device{};
-  bool device_ok = false;
-  bool started = false;
-  Ticks latency = 0;
-
-  static void callback(ma_device* dev, void* out, const void* /*in*/, ma_uint32 frames) {
-    static_cast<Player*>(dev->pUserData)->audio_callback(static_cast<float*>(out), frames);
-  }
-
-  bool open(Player* owner, bool null_backend) {
-    ma_backend null_only[] = {ma_backend_null};
-    if (ma_context_init(null_backend ? null_only : nullptr, null_backend ? 1 : 0, nullptr, &context) != MA_SUCCESS) return false;
-    context_ok = true;
-    ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
-    cfg.playback.format = ma_format_f32;
-    cfg.playback.channels = kOutChannels;
-    cfg.sampleRate = kOutRate;
-    cfg.dataCallback = &AudioOut::callback;
-    cfg.pUserData = owner;
-    cfg.performanceProfile = ma_performance_profile_low_latency;
-    if (ma_device_init(&context, &cfg, &device) != MA_SUCCESS) return false;
-    device_ok = true;
-    const ma_uint32 buffered = device.playback.internalPeriodSizeInFrames * std::max<ma_uint32>(1, device.playback.internalPeriods);
-    const ma_uint32 rate = device.playback.internalSampleRate ? device.playback.internalSampleRate : kOutRate;
-    latency = mul_div(buffered, kTicksPerSecond, rate, Rounding::Nearest);
-    return true;
-  }
-
-  void start() {
-    if (device_ok && !started && ma_device_start(&device) == MA_SUCCESS) started = true;
-  }
-  void stop() {
-    if (device_ok && started) {
-      ma_device_stop(&device);
-      started = false;
-    }
-  }
-  ~AudioOut() {
-    if (device_ok) ma_device_uninit(&device);
-    if (context_ok) ma_context_uninit(&context);
-  }
-};
 
 Player::Player(const Source& src, PlayerOptions opts) : opts_(opts) {
   // Each decoder opens its own demuxer, so audio and video read independently.
@@ -93,8 +45,8 @@ Player::Player(const Source& src, PlayerOptions opts) : opts_(opts) {
 
   ring_capacity_ = static_cast<size_t>(kOutRate / 2) * kOutChannels;  // 0.5 s
   if (audio_) {
-    out_ = std::make_unique<AudioOut>();
-    audio_device_ok_ = out_->open(this, opts.null_audio_device);
+    out_ = std::make_unique<AudioOutput>();
+    audio_device_ok_ = out_->open(&Player::audio_trampoline, this, opts.null_audio_device);
     if (!audio_device_ok_) out_.reset();  // no device: fall back to the steady clock
   }
   video_seek_pending_ = video_ != nullptr;
@@ -139,7 +91,7 @@ Ticks Player::position_locked() const {
     // Interpolate between device callbacks (at most 30 ms) for smooth video.
     if (consumed_ > 0) t += std::min<Ticks>(since(last_callback_, Clock::now()), kTicksPerSecond * 3 / 100);
     // What the device has taken is still buffered before it is heard.
-    t = std::max(base_, t - out_->latency);
+    t = std::max(base_, t - out_->latency());
   } else {
     t = base_ + since(started_, Clock::now());
   }
@@ -382,7 +334,7 @@ std::string Player::stats_json() const {
   j.key("hasVideo").value(video_ != nullptr);
   j.key("hasAudio").value(audio_ != nullptr);
   j.key("audioDevice").value(audio_device_ok_);
-  j.key("audioLatencyTicks").value(out_ ? out_->latency : Ticks{0});
+  j.key("audioLatencyTicks").value(out_ ? out_->latency() : Ticks{0});
   j.key("decoder").value(video_ ? video_->decoder_name() : std::string());
   j.key("hardware").value(video_ ? video_->hardware() : false);
   j.key("framesDecoded").value(frames_decoded_);

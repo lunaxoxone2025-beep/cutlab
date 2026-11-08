@@ -117,10 +117,13 @@ jobs:
           # Without zero-initialised locals, so valgrind still sees mistakes.
           cmake -S core -B build/core-vg -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCUTLAB_ZERO_INIT_LOCALS=OFF -DCUTLAB_WITH_MEDIA=ON \
             -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
-          cmake --build build/core-vg -j 4 --target cutlab_stress_preview
+          cmake --build build/core-vg -j 4 --target cutlab_stress_preview cutlab_timeline_tests
           M=build/android-media; T=build/test-media
-          valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect \
-            build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
+          VG="valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect"
+          $VG build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
+          CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
+      - name: Timeline benchmark (Linux)
+        run: build/core/cutlab_bench_timeline build/test-media build/android-media
 
   core-windows:
     name: C++ core + media engine (Windows x64)
@@ -157,6 +160,50 @@ jobs:
           $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
           $m = "${{ github.workspace }}/build/test-media"
           build/core/Release/cutlab_stress_preview.exe 4 "$m/gray60.mp4" "$m/rotated.mp4" "$m/hevc10.mp4" "$m/vfr.mkv" "$m/tone.mp3" "$m/red.png"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  windows-app:
+    name: Windows app — timeline playback (integration)
+    needs: test-media
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-media
+          path: build/test-media
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Fetch FFmpeg (LGPL, shared)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ffmpeg/fetch_ffmpeg_windows.ps1 -Dest build/ffmpeg-win64
+      - name: Build media engine (cutlab_core.dll)
+        run: |
+          cmake -S core -B build/core -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_SHARED=ON -DCUTLAB_FFMPEG_ROOT=${{ github.workspace }}/build/ffmpeg-win64
+          cmake --build build/core --config Release
+      - name: Timeline benchmark (Windows)
+        shell: pwsh
+        run: |
+          $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
+          build/core/Release/cutlab_bench_timeline.exe "${{ github.workspace }}/build/test-media"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Run the app's timeline playback test on Windows
+        shell: pwsh
+        working-directory: apps/cutlab
+        run: |
+          flutter create --platforms=windows --org com.lunaxoxone.studio --project-name cutlab .
+          flutter pub get
+          # The engine and FFmpeg DLLs are found through PATH.
+          $env:PATH = "${{ github.workspace }}\build\core\Release;${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
+          $env:CUTLAB_TEST_MEDIA = "${{ github.workspace }}\build\test-media"
+          flutter test integration_test/timeline_playback_test.dart -d windows --reporter expanded
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   dart-packages:

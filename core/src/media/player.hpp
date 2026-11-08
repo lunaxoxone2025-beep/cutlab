@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "audio_decoder.hpp"
+#include "audio_output.hpp"
 #include "video_decoder.hpp"
 
 namespace cutlab::media {
@@ -64,20 +65,18 @@ class Player {
   std::string error() const;
 
  private:
-  struct AudioOut;
-  friend struct AudioOut;
-
   void video_loop();
   void audio_loop();
   Ticks position_locked() const;
   void update_end_locked();
   void audio_callback(float* out, uint32_t frames);
+  static void audio_trampoline(void* self, float* out, uint32_t frames) { static_cast<Player*>(self)->audio_callback(out, frames); }
 
   PlayerOptions opts_;
   Ticks duration_ = 0;
   std::unique_ptr<VideoDecoder> video_;
   std::unique_ptr<AudioDecoder> audio_;
-  std::unique_ptr<AudioOut> out_;
+  std::unique_ptr<AudioOutput> out_;
   bool audio_device_ok_ = false;
 
   mutable std::mutex mu_;

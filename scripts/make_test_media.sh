@@ -41,6 +41,10 @@ q -f lavfi -i "sine=frequency=440:duration=3:sample_rate=44100" -c:a libmp3lame 
   q -f lavfi -i "sine=frequency=440:duration=3:sample_rate=44100" "$OUT/tone.wav"
 q -f lavfi -i "color=c=red:s=64x48" -frames:v 1 "$OUT/red.png"
 
+# Mixer tests: tones of exactly known amplitude (0.5).
+q -f lavfi -i "aevalsrc='0.5*sin(2*PI*1000*t)|0.5*sin(2*PI*1000*t)':s=48000:d=6" -c:a pcm_s16le "$OUT/tone1k.wav"
+q -f lavfi -i "aevalsrc='0.5*sin(2*PI*440*t)':s=44100:d=6" -c:a aac -b:a 192k "$OUT/tone440.m4a"
+
 # Two-hour recording (tiny frames so it is quick to make) for long-file seeks.
 q -f lavfi -i "$(gray 30 | sed 's/320x180/96x54/')" -f lavfi -i "anullsrc=r=16000:cl=mono" -t 7200 \
   -c:v libx264 -preset ultrafast -crf 20 -g 300 -c:a aac -b:a 24k -movflags +faststart "$OUT/long2h.mp4"

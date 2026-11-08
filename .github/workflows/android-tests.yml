@@ -61,7 +61,8 @@ jobs:
           cmake --build build/core-x86_64 -j 4
           mkdir -p dist/native
           cp build/core-x86_64/libcutlab_core.so build/core-x86_64/cutlab_media_tests build/core-x86_64/cutlab_stress_preview \
-            build/core-x86_64/cutlab_core_tests build/core-x86_64/cutlab_crash_report_tests dist/native/
+            build/core-x86_64/cutlab_core_tests build/core-x86_64/cutlab_crash_report_tests \
+            build/core-x86_64/cutlab_timeline_tests build/core-x86_64/cutlab_bench_timeline dist/native/
       - id: mediacache
         uses: actions/cache@v4
         with:
@@ -164,7 +165,8 @@ jobs:
       - name: Results
         if: always()
         run: |
-          grep -h "PREVIEW-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          sed -n '/NATIVE-TEST bench: start/,/NATIVE-TEST bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           echo "--- crashes in logcat ---"
           grep -h -E "F DEBUG|FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|cutlab-crash" build/emulator-logs/logcat.txt 2>/dev/null | head -80 || true
       - uses: actions/upload-artifact@v4

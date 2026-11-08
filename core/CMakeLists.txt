@@ -40,6 +40,8 @@ if(CUTLAB_WITH_MEDIA)
     src/media/video_decoder.cpp
     src/media/audio_decoder.cpp
     src/media/player.cpp
+    src/media/audio_output.cpp
+    src/media/timeline.cpp
     src/media/miniaudio_impl.c
     src/media/media_capi.cpp
     src/diag/diag.cpp)
@@ -122,6 +124,12 @@ if(CUTLAB_BUILD_TESTS)
     target_link_libraries(cutlab_media_tests PRIVATE cutlab_core)
     add_test(NAME cutlab_media_tests COMMAND cutlab_media_tests)
     set_tests_properties(cutlab_media_tests PROPERTIES TIMEOUT 900)
+    add_executable(cutlab_timeline_tests tests/test_timeline.cpp)
+    target_link_libraries(cutlab_timeline_tests PRIVATE cutlab_core)
+    add_test(NAME cutlab_timeline_tests COMMAND cutlab_timeline_tests)
+    set_tests_properties(cutlab_timeline_tests PROPERTIES TIMEOUT 900)
+    add_executable(cutlab_bench_timeline tests/bench_timeline.cpp)
+    target_link_libraries(cutlab_bench_timeline PRIVATE cutlab_core)
     # Preview stress test (run by hand / in CI on real-size media files).
     find_package(Threads REQUIRED)
     add_executable(cutlab_stress_preview tests/stress_preview.cpp)

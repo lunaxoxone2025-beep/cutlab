@@ -214,6 +214,116 @@ class PlayerStats {
   }
 }
 
+/// Playback statistics of the timeline renderer (see docs/PLAYBACK.md).
+class TimelineStats {
+  const TimelineStats({
+    this.audioDevice = false,
+    this.audioBackend = '',
+    this.audioLatencyMs = 0,
+    this.audioBufferedMs = 0,
+    this.audioUnderruns = 0,
+    this.audioClockDriftMs = 0,
+    this.clippedSamples = 0,
+    this.audioDecoders = 0,
+    this.mixLoadPercent = 0,
+    this.framesShown = 0,
+    this.framesDropped = 0,
+    this.videoLateAvgMs = 0,
+    this.videoLateMaxMs = 0,
+    this.clipTransitions = 0,
+    this.preparedTransitions = 0,
+    this.decoder = '',
+    this.hardware = false,
+    this.videoError = '',
+    this.audioError = '',
+    this.rssKiB = 0,
+  });
+
+  final bool audioDevice;
+  final String audioBackend;
+  final double audioLatencyMs;
+  final double audioBufferedMs;
+  final int audioUnderruns;
+
+  /// Audio clock minus wall clock since playback started (device rate).
+  final double audioClockDriftMs;
+  final int clippedSamples;
+  final int audioDecoders;
+  final double mixLoadPercent;
+  final int framesShown;
+  final int framesDropped;
+
+  /// How late pictures were shown relative to the audio clock.
+  final double videoLateAvgMs;
+  final double videoLateMaxMs;
+  final int clipTransitions;
+  final int preparedTransitions;
+  final String decoder;
+  final bool hardware;
+  final String videoError;
+  final String audioError;
+  final int rssKiB;
+
+  factory TimelineStats.fromJson(String text) {
+    final j = jsonDecode(text) as Map<String, Object?>;
+    int n(String k) => (j[k] as num?)?.toInt() ?? 0;
+    double d(String k) => (j[k] as num?)?.toDouble() ?? 0;
+    return TimelineStats(
+      audioDevice: j['audioDevice'] == true,
+      audioBackend: j['audioBackend'] as String? ?? '',
+      audioLatencyMs: d('audioLatencyMs'),
+      audioBufferedMs: d('audioBufferedMs'),
+      audioUnderruns: n('audioUnderruns'),
+      audioClockDriftMs: d('audioClockDriftMs'),
+      clippedSamples: n('clippedSamples'),
+      audioDecoders: n('audioDecoders'),
+      mixLoadPercent: d('mixLoadPercent'),
+      framesShown: n('framesShown'),
+      framesDropped: n('framesDropped'),
+      videoLateAvgMs: d('videoLateAvgMs'),
+      videoLateMaxMs: d('videoLateMaxMs'),
+      clipTransitions: n('clipTransitions'),
+      preparedTransitions: n('preparedTransitions'),
+      decoder: j['decoder'] as String? ?? '',
+      hardware: j['hardware'] == true,
+      videoError: j['videoError'] as String? ?? '',
+      audioError: j['audioError'] as String? ?? '',
+      rssKiB: n('rssKiB'),
+    );
+  }
+}
+
+/// A picture from the timeline renderer; [image] null = black (a gap).
+class TimelinePicture {
+  const TimelinePicture(this.image, this.ptsTicks);
+  final RgbaImage? image;
+  final int ptsTicks;
+}
+
+/// Real-time playback of the edited timeline (native renderer + mixer).
+abstract class TimelineRenderer {
+  /// Replaces what is played (text from buildTimelinePlan). Throws
+  /// MediaEngineException for a malformed plan.
+  void setPlan(String plan);
+  void play();
+  void pause();
+  bool get playing;
+  void seek(int ticks, {bool accurate = true});
+  int get positionTicks;
+  int get durationTicks;
+
+  /// The picture due now if it changed since the last call, else null.
+  TimelinePicture? pollFrame();
+
+  /// Peak levels of what is heard now: one per plan track, then master.
+  List<double> levels();
+  TimelineStats stats();
+
+  /// The mix, rendered offline (48 kHz stereo, interleaved).
+  Float32List renderAudio(int startTicks, int frames);
+  void dispose();
+}
+
 /// Playback of one media file. Frames are pulled by the UI once per screen
 /// refresh with [pollFrame]; decoding and audio run on native threads.
 abstract class PreviewPlayer {
@@ -243,6 +353,11 @@ abstract class MediaEngine {
   /// Opens a player in the background (opening can take a moment for big
   /// files and must never block the UI).
   Future<PreviewPlayer> openPlayer(String engineUri, {int maxWidth = 1280, int maxHeight = 720, bool hardware = true});
+
+  /// The timeline renderer (picture + audio mix). [nullAudio]: no sound
+  /// device (tests).
+  TimelineRenderer openTimeline({int maxWidth = 1280, int maxHeight = 720, bool nullAudio = false}) =>
+      throw MediaEngineException(info.reason ?? 'The media engine is not available.');
 
   /// Completes when no engine call is still reading [engineUri], so the
   /// file descriptor behind it can be closed safely.

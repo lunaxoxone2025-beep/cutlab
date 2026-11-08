@@ -1,5 +1,6 @@
 #include "audio_decoder.hpp"
 
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -100,9 +101,16 @@ bool AudioDecoder::decode_more() {
         }
         const int err = swr_alloc_set_opts2(&swr_, &out_layout, AV_SAMPLE_FMT_FLT, rate_, &in_layout,
                                             static_cast<AVSampleFormat>(f->format), f->sample_rate, 0, nullptr);
+        const bool mono = in_layout.nb_channels == 1;
         av_channel_layout_uninit(&in_layout);
         av_channel_layout_uninit(&out_layout);
         check(err, "audio resampler");
+        // A mono recording (a microphone) plays at full level on both sides,
+        // not 3 dB lower as a downmixed centre channel would.
+        if (mono && channels_ == 2) {
+          const double matrix[2] = {1.0, 1.0};  // out L, out R from the one input channel
+          check(swr_set_matrix(swr_, matrix, 1), "audio resampler matrix");
+        }
         check(swr_init(swr_), "audio resampler init");
       }
       const int max_out = swr_get_out_samples(swr_, f->nb_samples);

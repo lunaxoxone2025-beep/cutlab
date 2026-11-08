@@ -50,7 +50,28 @@ class EngineBindings {
         diagInit = lib
             .lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>('cutlab_diag_init'),
         diagNote = lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('cutlab_diag_note'),
-        diagRecent = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_diag_recent');
+        diagRecent = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_diag_recent'),
+        tlOpen = lib.lookupFunction<Int32 Function(Int32, Int32, Int32, Pointer<Pointer<Void>>), int Function(int, int, int, Pointer<Pointer<Void>>)>(
+            'cutlab_timeline_open'),
+        tlClose = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_close'),
+        tlSetPlan = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>), int Function(Pointer<Void>, Pointer<Utf8>)>(
+            'cutlab_timeline_set_plan'),
+        tlPlay = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_play'),
+        tlPause = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_timeline_pause'),
+        tlPlaying = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_playing'),
+        tlSeek = lib.lookupFunction<Void Function(Pointer<Void>, Int64, Int32), void Function(Pointer<Void>, int, int)>('cutlab_timeline_seek'),
+        tlPosition = lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_position'),
+        tlDuration = lib.lookupFunction<Int64 Function(Pointer<Void>), int Function(Pointer<Void>)>('cutlab_timeline_duration'),
+        tlFrame = lib.lookupFunction<
+            Int32 Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, Int64, Pointer<Int32>, Pointer<Int32>, Pointer<Int64>),
+            int Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, int, Pointer<Int32>, Pointer<Int32>,
+                Pointer<Int64>)>('cutlab_timeline_frame'),
+        tlLevels = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Float>, Int32), int Function(Pointer<Void>, Pointer<Float>, int)>(
+            'cutlab_timeline_levels'),
+        tlStats = lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Pointer<Utf8>>), int Function(Pointer<Void>, Pointer<Pointer<Utf8>>)>(
+            'cutlab_timeline_stats'),
+        tlRenderAudio = lib.lookupFunction<Int32 Function(Pointer<Void>, Int64, Int32, Pointer<Float>, Pointer<Float>, Int32),
+            int Function(Pointer<Void>, int, int, Pointer<Float>, Pointer<Float>, int)>('cutlab_timeline_render_audio');
 
   final Pointer<Utf8> Function() lastError;
   final void Function(Pointer<Void>) free;
@@ -75,10 +96,24 @@ class EngineBindings {
   final int Function(Pointer<Utf8>, Pointer<Utf8>) diagInit;
   final void Function(Pointer<Utf8>) diagNote;
   final int Function(Pointer<Pointer<Utf8>>) diagRecent;
+  final int Function(int, int, int, Pointer<Pointer<Void>>) tlOpen;
+  final void Function(Pointer<Void>) tlClose;
+  final int Function(Pointer<Void>, Pointer<Utf8>) tlSetPlan;
+  final void Function(Pointer<Void>) tlPlay;
+  final void Function(Pointer<Void>) tlPause;
+  final int Function(Pointer<Void>) tlPlaying;
+  final void Function(Pointer<Void>, int, int) tlSeek;
+  final int Function(Pointer<Void>) tlPosition;
+  final int Function(Pointer<Void>) tlDuration;
+  final int Function(Pointer<Void>, Pointer<Uint64>, Pointer<Uint8>, int, Pointer<Int32>, Pointer<Int32>, Pointer<Int64>) tlFrame;
+  final int Function(Pointer<Void>, Pointer<Float>, int) tlLevels;
+  final int Function(Pointer<Void>, Pointer<Pointer<Utf8>>) tlStats;
+  final int Function(Pointer<Void>, int, int, Pointer<Float>, Pointer<Float>, int) tlRenderAudio;
 
   static const statusOk = 0;
   static const statusUnavailable = 4;
   static const flagSoftwareDecode = 1;
+  static const flagNullAudio = 2;
 
   String get lastErrorMessage => lastError().toDartString();
 

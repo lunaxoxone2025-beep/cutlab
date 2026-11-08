@@ -1,214 +1,205 @@
-import 'dart:async';
-import 'dart:ui' as ui;
-
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
 import 'package:flutter/material.dart';
 
 import '../editor/editor_controller.dart';
 import '../format.dart';
-import '../storage/app_settings.dart';
+import '../playback/timeline_playback.dart';
 import '../theme.dart';
-import 'timeline_assets.dart';
+import 'mixer_panel.dart';
 import 'timeline_state.dart';
 
-/// Shows the timeline frame under the playhead: the picture on the top-most
-/// visible video/image track (decoded frame-accurately by the engine; fast
-/// keyframe seeks while scrubbing) and any titles at that time.
-///
-/// Phase 4 scope: still frames at the playhead. Continuous playback of the
-/// edited timeline with mixed audio needs the native timeline renderer
-/// (Phase 5); playing a single file works in the Source view.
-class ProgramMonitor extends StatefulWidget {
-  const ProgramMonitor({super.key, required this.controller, required this.state, required this.assets, required this.settings});
+/// The timeline monitor: the edited timeline as it plays (picture of the
+/// top-most visible clip, titles, all audio mixed by the native renderer),
+/// with the transport controls and a playback quality indicator.
+class ProgramMonitor extends StatelessWidget {
+  const ProgramMonitor({super.key, required this.controller, required this.state, required this.playback});
 
   final EditorController controller;
   final TimelineState state;
-  final TimelineAssets assets;
-  final AppSettings settings;
-
-  @override
-  State<ProgramMonitor> createState() => _ProgramMonitorState();
-}
-
-class _ProgramMonitorState extends State<ProgramMonitor> {
-  ui.Image? _image;
-  String _shownKey = '';
-  bool _busy = false;
-  bool _again = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.state.addListener(_changed);
-    widget.controller.addListener(_changed);
-    _changed();
-  }
-
-  @override
-  void didUpdateWidget(ProgramMonitor old) {
-    super.didUpdateWidget(old);
-    if (old.state != widget.state) {
-      old.state.removeListener(_changed);
-      widget.state.addListener(_changed);
-    }
-    if (old.controller != widget.controller) {
-      old.controller.removeListener(_changed);
-      widget.controller.addListener(_changed);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.state.removeListener(_changed);
-    widget.controller.removeListener(_changed);
-    _image?.dispose();
-    super.dispose();
-  }
-
-  Project get _p => widget.state.preview ?? widget.controller.project;
-
-  bool get _fast => widget.state.scrubbing || widget.state.preview != null;
-
-  /// What should be on screen: "<media>|<source time>|<a|f>" (accurate or
-  /// fast frame) or "" for black.
-  String _wantedKey() {
-    final pc = _p.topVisualAt(widget.state.playhead);
-    if (pc == null || pc.clip.mediaId == null) return '';
-    final m = _p.mediaById(pc.clip.mediaId);
-    if (m == null) return '';
-    final src = m.kind == MediaKind.image ? 0 : _p.sourceTimeAt(pc.clip, widget.state.playhead);
-    return '${m.id}|$src|${_fast && m.kind != MediaKind.image ? 'f' : 'a'}';
-  }
-
-  void _changed() {
-    if (!mounted) return;
-    setState(() {}); // titles / timecode
-    final key = _wantedKey();
-    if (key == _shownKey) return;
-    if (_busy) {
-      _again = true;
-      return;
-    }
-    unawaited(_load(key));
-  }
-
-  Future<void> _load(String key) async {
-    _busy = true;
-    _again = false;
-    try {
-      if (key.isEmpty) {
-        _setImage(null, key);
-        return;
-      }
-      final engine = widget.controller.engine;
-      if (!engine.available) {
-        setState(() => _error = engine.info.reason);
-        _shownKey = key;
-        return;
-      }
-      final parts = key.split('|');
-      final m = _p.mediaById(parts[0]);
-      if (m == null) {
-        _shownKey = key;
-        return;
-      }
-      final src = int.parse(parts[1]);
-      final accurate = parts[2] == 'a';
-      final uri = await widget.assets.engineUri(m);
-      final s = widget.settings;
-      final frame = await engine.frameAt(uri, src, accurate: accurate, maxWidth: s.previewMaxWidth, maxHeight: s.previewMaxHeight);
-      final c = Completer<ui.Image>();
-      ui.decodeImageFromPixels(frame.pixels, frame.width, frame.height, ui.PixelFormat.rgba8888, c.complete);
-      final img = await c.future;
-      if (!mounted) {
-        img.dispose();
-        return;
-      }
-      _error = null;
-      _setImage(img, key);
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Cannot show this frame: $e');
-      _shownKey = key;
-    } finally {
-      _busy = false;
-      // A newer position (or the accurate frame after scrubbing) is pending.
-      if (mounted && (_again || _wantedKey() != _shownKey)) unawaited(_load(_wantedKey()));
-    }
-  }
-
-  void _setImage(ui.Image? img, String key) {
-    setState(() {
-      _image?.dispose();
-      _image = img;
-      _shownKey = key;
-    });
-  }
+  final TimelinePlayback playback;
 
   @override
   Widget build(BuildContext context) {
-    final p = _p;
-    final t = widget.state.playhead;
-    final titles = [
-      for (final tr in p.tracks)
-        if (tr.kind == TrackKind.text && !tr.hidden)
-          for (final c in tr.clips)
-            if (c.startTicks <= t && t < c.endTicks) c.data['text'] as String? ?? '',
-    ];
-    final s = p.settings;
-    return Column(
-      children: [
-        Expanded(
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: s.width / s.height,
-              child: Container(
-                color: Colors.black,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (_image != null) RawImage(image: _image, fit: BoxFit.contain),
-                    if (_error != null && _image == null)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(CutlabSpacing.md),
-                          child: Text(_error!,
-                              textAlign: TextAlign.center, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
-                        ),
-                      ),
-                    if (p.durationTicks == 0)
-                      const Center(
-                        child: Text('Add media to the timeline (＋ on a file in Media)',
-                            textAlign: TextAlign.center, style: TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
-                      ),
-                    if (titles.isNotEmpty)
-                      Align(
-                        alignment: const Alignment(0, 0.8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(CutlabSpacing.sm),
-                          child: Text(
-                            titles.join('\n'),
-                            key: const Key('monitorTitles'),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, shadows: [Shadow(blurRadius: 6)]),
+    return ListenableBuilder(
+      listenable: Listenable.merge([playback, state, controller]),
+      builder: (context, _) {
+        final p = state.preview ?? controller.project;
+        final t = state.playhead;
+        final titles = [
+          for (final tr in p.tracks)
+            if (tr.kind == TrackKind.text && !tr.hidden)
+              for (final c in tr.clips)
+                if (c.startTicks <= t && t < c.endTicks) c.data['text'] as String? ?? '',
+        ];
+        final s = p.settings;
+        final image = playback.image;
+        return Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: s.width / s.height,
+                  child: Container(
+                    color: Colors.black,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (image != null) RawImage(key: const Key('monitorPicture'), image: image, fit: BoxFit.contain),
+                        if (!playback.available && p.durationTicks > 0)
+                          _note(playback.unavailable ?? controller.engine.info.reason ?? 'Playback is not available in this build.'),
+                        if (p.durationTicks == 0) _note('Add media to the timeline (＋ on a file in Media)'),
+                        if (titles.isNotEmpty)
+                          Align(
+                            alignment: const Alignment(0, 0.8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(CutlabSpacing.sm),
+                              child: Text(
+                                titles.join('\n'),
+                                key: const Key('monitorTitles'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, shadows: [Shadow(blurRadius: 6)]),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: CutlabSpacing.xs),
-          child: Text(
-            '${formatTimecode(t, p.fps)} / ${formatTimecode(p.durationTicks, p.fps)}',
-            style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted),
-          ),
-        ),
-      ],
+            _Transport(controller: controller, state: state, playback: playback, project: p),
+          ],
+        );
+      },
     );
   }
+
+  static Widget _note(String text) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(CutlabSpacing.md),
+          child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
+        ),
+      );
+}
+
+class _Transport extends StatelessWidget {
+  const _Transport({required this.controller, required this.state, required this.playback, required this.project});
+
+  final EditorController controller;
+  final TimelineState state;
+  final TimelinePlayback playback;
+  final Project project;
+
+  @override
+  Widget build(BuildContext context) {
+    final can = playback.available && project.durationTicks > 0;
+    final advanced = controller.project.editorMode == EditorMode.advanced;
+    final st = playback.stats;
+    return Padding(
+      padding: const EdgeInsets.only(top: CutlabSpacing.xs),
+      child: Row(
+        children: [
+          IconButton(
+            key: const Key('tlStop'),
+            tooltip: 'Stop (Shift+Space): back to where playback started',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.stop),
+            onPressed: can ? playback.stop : null,
+          ),
+          IconButton.filled(
+            key: const Key('tlPlay'),
+            tooltip: playback.playing ? 'Pause (Space)' : 'Play (Space)',
+            icon: Icon(playback.playing ? Icons.pause : Icons.play_arrow),
+            onPressed: can ? playback.toggle : null,
+          ),
+          const SizedBox(width: CutlabSpacing.sm),
+          Text(
+            '${formatTimecode(state.playhead, project.fps)} / ${formatTimecode(project.durationTicks, project.fps)}',
+            style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
+          ),
+          const Spacer(),
+          if (playback.available && st.framesShown > 0)
+            Flexible(
+              child: InkWell(
+                key: const Key('syncInfo'),
+                onTap: () => showSyncDiagnostics(context, playback),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.xs, vertical: CutlabSpacing.xs),
+                  child: Text(
+                    [
+                      if (st.decoder.isNotEmpty) '${st.hardware ? 'HW' : 'SW'} ${st.decoder}',
+                      '${st.framesDropped} dropped',
+                      if (advanced) 'A/V ${st.videoLateAvgMs.toStringAsFixed(0)} ms',
+                      if (st.audioUnderruns > 0) '${st.audioUnderruns} audio gaps',
+                    ].join(' · '),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11, color: st.framesDropped > 0 || st.audioUnderruns > 0 ? CutlabColors.danger : CutlabColors.textMuted),
+                  ),
+                ),
+              ),
+            ),
+          SizedBox(width: 56, height: 8, child: LevelMeter(level: playback.masterLevel, key: const Key('masterMeter'))),
+          const SizedBox(width: CutlabSpacing.sm),
+        ],
+      ),
+    );
+  }
+}
+
+/// Playback quality and audio/video synchronisation figures.
+Future<void> showSyncDiagnostics(BuildContext context, TimelinePlayback playback) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => ListenableBuilder(
+      listenable: playback,
+      builder: (ctx, _) {
+        final s = playback.stats;
+        String ms(double v) => '${v.toStringAsFixed(1)} ms';
+        final rows = <(String, String)>[
+          ('Clock', s.audioDevice ? 'audio device (${s.audioBackend})' : 'system clock (no audio device)'),
+          ('Audio output latency', ms(s.audioLatencyMs)),
+          ('Audio mixed ahead', ms(s.audioBufferedMs)),
+          ('Audio gaps (underruns)', '${s.audioUnderruns}'),
+          ('Audio clock vs wall clock', ms(s.audioClockDriftMs)),
+          ('Picture late vs sound (avg / max)', '${ms(s.videoLateAvgMs)} / ${ms(s.videoLateMaxMs)}'),
+          ('Pictures shown / dropped', '${s.framesShown} / ${s.framesDropped}'),
+          ('Clip changes (prepared ahead)', '${s.clipTransitions} (${s.preparedTransitions})'),
+          ('Video decoder', s.decoder.isEmpty ? '—' : '${s.decoder} (${s.hardware ? 'hardware' : 'software'})'),
+          ('Audio decoders open', '${s.audioDecoders}'),
+          ('Mixer load', '${s.mixLoadPercent.toStringAsFixed(2)} % of one CPU'),
+          ('Clipped samples', '${s.clippedSamples}'),
+          ('Memory', '${s.rssKiB ~/ 1024} MB'),
+          if (s.videoError.isNotEmpty) ('Video problem', s.videoError),
+          if (s.audioError.isNotEmpty) ('Audio problem', s.audioError),
+        ];
+        return AlertDialog(
+          key: const Key('syncDiagnostics'),
+          title: const Text('Playback diagnostics'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final (k, v) in rows)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: Text(k, style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted))),
+                        const SizedBox(width: CutlabSpacing.sm),
+                        Expanded(child: Text(v, style: const TextStyle(fontSize: 12))),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close'))],
+        );
+      },
+    ),
+  );
 }

@@ -12,17 +12,21 @@ const String projectFormatId = 'cutlab-project';
 
 /// Current on-disk format version. Bump it together with a migration in
 /// [defaultMigrations] whenever the JSON layout changes incompatibly.
-const int currentFormatVersion = 2;
+const int currentFormatVersion = 3;
 
 /// Transforms the `project` object of version N into version N + 1.
 typedef Migration = Map<String, Object?> Function(Map<String, Object?> project);
 
 /// Migrations keyed by the version they upgrade *from*.
-const Map<int, Migration> defaultMigrations = {1: _v1ToV2};
+const Map<int, Migration> defaultMigrations = {1: _v1ToV2, 2: _v2ToV3};
 
 /// v2 added image tracks and optional clip fields (fades, links). Every v1
 /// file is already valid v2, so nothing needs rewriting.
 Map<String, Object?> _v1ToV2(Map<String, Object?> project) => project;
+
+/// v3: track volume/solo and project master volume. Missing values read as
+/// 1.0 / false, so older projects need no change.
+Map<String, Object?> _v2ToV3(Map<String, Object?> project) => project;
 
 class ProjectCodec {
   final Map<int, Migration> migrations;

@@ -91,6 +91,18 @@ class FfiMediaEngine extends MediaEngine {
       });
 
   @override
+  TimelineRenderer openTimeline({int maxWidth = 1280, int maxHeight = 720, bool nullAudio = false}) {
+    final out = calloc<Pointer<Void>>();
+    try {
+      final status = _b.tlOpen(maxWidth, maxHeight, nullAudio ? EngineBindings.flagNullAudio : 0, out);
+      if (status != EngineBindings.statusOk) throw MediaEngineException(_b.lastErrorMessage);
+      return _FfiTimeline(_b, out.value, maxWidth, maxHeight);
+    } finally {
+      calloc.free(out);
+    }
+  }
+
+  @override
   void initDiagnostics(String dir, String deviceInfo) {
     final d = dir.toNativeUtf8();
     final i = deviceInfo.toNativeUtf8();
@@ -338,5 +350,121 @@ class _FfiPlayer implements PreviewPlayer {
     calloc.free(_w);
     calloc.free(_hh);
     calloc.free(_pts);
+  }
+}
+
+// ---------------------------------------------------------------- timeline
+
+class _FfiTimeline implements TimelineRenderer {
+  _FfiTimeline(this._b, this._h, int maxW, int maxH)
+      : _capacity = maxW * maxH * 4,
+        _buf = calloc<Uint8>(maxW * maxH * 4),
+        _serial = calloc<Uint64>(),
+        _w = calloc<Int32>(),
+        _hh = calloc<Int32>(),
+        _pts = calloc<Int64>(),
+        _levels = calloc<Float>(_maxLevels);
+
+  static const _maxLevels = 64;
+  final EngineBindings _b;
+  final Pointer<Void> _h;
+  final int _capacity;
+  final Pointer<Uint8> _buf;
+  final Pointer<Uint64> _serial;
+  final Pointer<Int32> _w;
+  final Pointer<Int32> _hh;
+  final Pointer<Int64> _pts;
+  final Pointer<Float> _levels;
+  bool _disposed = false;
+
+  @override
+  void setPlan(String plan) {
+    if (_disposed) return;
+    final p = plan.toNativeUtf8();
+    try {
+      if (_b.tlSetPlan(_h, p) != EngineBindings.statusOk) throw MediaEngineException(_b.lastErrorMessage);
+    } finally {
+      calloc.free(p);
+    }
+  }
+
+  @override
+  void play() {
+    if (!_disposed) _b.tlPlay(_h);
+  }
+
+  @override
+  void pause() {
+    if (!_disposed) _b.tlPause(_h);
+  }
+
+  @override
+  bool get playing => !_disposed && _b.tlPlaying(_h) != 0;
+
+  @override
+  void seek(int ticks, {bool accurate = true}) {
+    if (!_disposed) _b.tlSeek(_h, ticks, accurate ? 1 : 0);
+  }
+
+  @override
+  int get positionTicks => _disposed ? 0 : _b.tlPosition(_h);
+
+  @override
+  int get durationTicks => _disposed ? 0 : _b.tlDuration(_h);
+
+  @override
+  TimelinePicture? pollFrame() {
+    if (_disposed) return null;
+    if (_b.tlFrame(_h, _serial, _buf, _capacity, _w, _hh, _pts) == 0) return null;
+    final w = _w.value, h = _hh.value;
+    if (w <= 0 || h <= 0) return TimelinePicture(null, _pts.value);
+    return TimelinePicture(RgbaImage(w, h, Uint8List.fromList(_buf.asTypedList(w * h * 4)), ptsTicks: _pts.value), _pts.value);
+  }
+
+  @override
+  List<double> levels() {
+    if (_disposed) return const [];
+    final n = _b.tlLevels(_h, _levels, _maxLevels);
+    return [for (var i = 0; i < n; i++) _levels[i]];
+  }
+
+  @override
+  TimelineStats stats() {
+    if (_disposed) return const TimelineStats();
+    final out = calloc<Pointer<Utf8>>();
+    try {
+      if (_b.tlStats(_h, out) != EngineBindings.statusOk) return const TimelineStats();
+      final s = out.value.toDartString();
+      _b.free(out.value.cast());
+      return TimelineStats.fromJson(s);
+    } finally {
+      calloc.free(out);
+    }
+  }
+
+  @override
+  Float32List renderAudio(int startTicks, int frames) {
+    final buf = calloc<Float>(frames * 2);
+    try {
+      if (_disposed || _b.tlRenderAudio(_h, startTicks, frames, buf, nullptr, 0) != EngineBindings.statusOk) {
+        throw MediaEngineException(_disposed ? 'closed' : _b.lastErrorMessage);
+      }
+      return Float32List.fromList(buf.asTypedList(frames * 2));
+    } finally {
+      calloc.free(buf);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _b.tlClose(_h);
+    calloc.free(_buf);
+    calloc.free(_serial);
+    calloc.free(_w);
+    calloc.free(_hh);
+    calloc.free(_pts);
+    calloc.free(_levels);
   }
 }

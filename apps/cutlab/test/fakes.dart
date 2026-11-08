@@ -74,6 +74,14 @@ PickedMedia song(String name) => PickedMedia(uri: '/music/$name', name: name, ki
 class FakeMediaEngine extends MediaEngine {
   final Map<String, ProbeInfo> probes = {};
   final List<FakePlayer> players = [];
+  final List<FakeTimeline> timelines = [];
+
+  @override
+  TimelineRenderer openTimeline({int maxWidth = 1280, int maxHeight = 720, bool nullAudio = false}) {
+    final t = FakeTimeline();
+    timelines.add(t);
+    return t;
+  }
   int probeCalls = 0;
 
   @override
@@ -150,3 +158,46 @@ ProbeInfo videoProbe({int seconds = 7200, Rational fps = Rational.fps60}) => Pro
       sampleRate: 48000,
       channels: 2,
     );
+
+
+/// Records what the playback controller asks of the timeline renderer.
+class FakeTimeline implements TimelineRenderer {
+  final List<String> plans = [];
+  final List<(int, bool)> seeks = [];
+  bool _playing = false;
+  int position = 0;
+  List<double> nextLevels = const [];
+  bool disposed = false;
+
+  String get plan => plans.isEmpty ? '' : plans.last;
+
+  @override
+  void setPlan(String plan) => plans.add(plan);
+  @override
+  void play() => _playing = true;
+  @override
+  void pause() => _playing = false;
+  @override
+  bool get playing => _playing;
+  set playing(bool v) => _playing = v;
+  @override
+  void seek(int ticks, {bool accurate = true}) {
+    seeks.add((ticks, accurate));
+    position = ticks;
+  }
+
+  @override
+  int get positionTicks => position;
+  @override
+  int get durationTicks => 0;
+  @override
+  TimelinePicture? pollFrame() => null;
+  @override
+  List<double> levels() => nextLevels;
+  @override
+  TimelineStats stats() => const TimelineStats(framesShown: 10, decoder: 'fake');
+  @override
+  Float32List renderAudio(int startTicks, int frames) => Float32List(frames * 2);
+  @override
+  void dispose() => disposed = true;
+}

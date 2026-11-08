@@ -15,6 +15,8 @@ import '../media/media_platform.dart';
 import '../storage/app_settings.dart';
 import '../theme.dart';
 import '../timeline/clip_inspector.dart';
+import '../playback/timeline_playback.dart';
+import '../timeline/mixer_panel.dart';
 import '../timeline/program_monitor.dart';
 import '../timeline/timeline_actions.dart';
 import '../timeline/timeline_assets.dart';
@@ -30,6 +32,8 @@ import 'source_viewer.dart';
 const double kDesktopBreakpoint = 1000;
 
 enum _Monitor { program, source }
+
+enum _Side { inspector, mixer }
 
 /// The editing workspace for one project.
 class WorkspaceScreen extends StatefulWidget {
@@ -47,6 +51,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   late final TimelineState _tl = TimelineState();
   late final TimelineAssets _assets = TimelineAssets(c);
   late final TimelineActions _actions = TimelineActions(c, _tl, onMessage: _snack);
+  late final TimelinePlayback _playback = TimelinePlayback(controller: c, state: _tl, assets: _assets, settings: widget.settings);
+  _Side _side = _Side.inspector;
   final FocusNode _focus = FocusNode(debugLabel: 'workspace');
   String? _selectedMediaId;
   _Monitor _monitor = _Monitor.program;
@@ -57,10 +63,19 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   MediaRef? get _selected => c.project.media.where((m) => m.id == _selectedMediaId).firstOrNull;
 
-  void _select(MediaRef m) => setState(() {
-        _selectedMediaId = m.id;
-        _monitor = _Monitor.source;
-      });
+  void _select(MediaRef m) {
+    _playback.pause(); // one thing plays at a time
+    setState(() {
+      _selectedMediaId = m.id;
+      _monitor = _Monitor.source;
+    });
+  }
+
+  /// Space: play/pause the timeline (showing the timeline monitor).
+  void _togglePlayback() {
+    if (_monitor != _Monitor.program) setState(() => _monitor = _Monitor.program);
+    _playback.toggle();
+  }
 
   @override
   void initState() {
@@ -79,6 +94,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     _lifecycle.dispose();
     c.removeListener(_projectChanged);
     _focus.dispose();
+    _playback.dispose(); // before the files it reads are released
     _assets.dispose();
     _tl.dispose();
     unawaited(c.close());
@@ -246,6 +262,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _tl.touch();
       }),
       const SingleActivator(LogicalKeyboardKey.escape): g(_tl.clearSelection),
+      const SingleActivator(LogicalKeyboardKey.space): g(_togglePlayback),
+      const SingleActivator(LogicalKeyboardKey.space, shift: true): g(_playback.stop),
+      const SingleActivator(LogicalKeyboardKey.keyK): g(_playback.pause),
+      const SingleActivator(LogicalKeyboardKey.keyL): g(() {
+        if (!_playback.playing) _togglePlayback();
+      }),
     };
   }
 
@@ -344,12 +366,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     ButtonSegment(value: _Monitor.source, label: Text('Source')),
                   ],
                   selected: {_monitor},
-                  onSelectionChanged: (v) => setState(() => _monitor = v.first),
+                  onSelectionChanged: (v) {
+                    if (v.first == _Monitor.source) _playback.pause();
+                    setState(() => _monitor = v.first);
+                  },
                 ),
               ),
               Expanded(
                 child: _monitor == _Monitor.program
-                    ? ProgramMonitor(controller: c, state: _tl, assets: _assets, settings: settings)
+                    ? ProgramMonitor(controller: c, state: _tl, playback: _playback)
                     : _PreviewPanel(
                         controller: c,
                         media: _selected,
@@ -364,6 +389,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Widget _timeline() => LayoutBuilder(builder: (context, box) {
         _timelineWidth = box.maxWidth - headerWidth;
+        _playback.viewportWidth = _timelineWidth;
         return Column(
           children: [
             TimelineToolbar(
@@ -410,11 +436,37 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 const SizedBox(width: CutlabSpacing.sm),
                 SizedBox(
                   width: 320,
-                  child: ListenableBuilder(
-                    listenable: _tl,
-                    builder: (context, _) => _tl.selection.isEmpty
-                        ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))
-                        : _Panel(title: 'Clip', child: ClipInspector(controller: c, state: _tl, actions: _actions)),
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(CutlabSpacing.xs),
+                          child: SegmentedButton<_Side>(
+                            key: const Key('sideSwitch'),
+                            showSelectedIcon: false,
+                            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                            segments: const [
+                              ButtonSegment(value: _Side.inspector, label: Text('Inspector')),
+                              ButtonSegment(value: _Side.mixer, label: Text('Mixer')),
+                            ],
+                            selected: {_side},
+                            onSelectionChanged: (v) => setState(() => _side = v.first),
+                          ),
+                        ),
+                        Expanded(
+                          child: _side == _Side.mixer
+                              ? MixerPanel(controller: c, playback: _playback)
+                              : ListenableBuilder(
+                                  listenable: _tl,
+                                  builder: (context, _) => _tl.selection.isEmpty
+                                      ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))
+                                      : _Panel(title: 'Clip', child: ClipInspector(controller: c, state: _tl, actions: _actions)),
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -429,7 +481,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Widget _mobile() {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           Expanded(
@@ -443,6 +495,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             tabs: [
               const Tab(text: 'Timeline'),
               Tab(text: 'Media (${c.project.media.length})'),
+              const Tab(text: 'Mixer'),
               const Tab(text: 'Project'),
             ],
           ),
@@ -453,6 +506,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               children: [
                 _timeline(),
                 _mediaPanel(),
+                MixerPanel(controller: c, playback: _playback),
                 _ProjectPanel(controller: c, showMode: true),
               ],
             ),

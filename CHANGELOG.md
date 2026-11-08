@@ -1,5 +1,14 @@
 # Changelog
 
+## CUTLAB 0.5 — Phase 5: timeline playback and audio engine (2026-11-08)
+
+- Play the edited timeline: continuous playback across cuts, gaps and overlapping tracks, photos, next clip prepared ahead, frame-accurate seeking, the cursor follows the sound.
+- Real-time audio mixer: every track and clip heard together. Clip, track and master volume, mute and solo, fade in/out, level meters, mono sources at full level.
+- Audio-clocked sync without drift on long recordings, plus playback diagnostics (latency, audio gaps, picture lateness, dropped frames, decoders, mixer load).
+- Transport under the monitor, Mixer panel (PC) and tab (phone), shortcuts Space / K / L / Shift+Space. Slider drags are heard while dragging and undo in one step.
+- Project format v3 (track volume and solo, master volume; older projects open unchanged).
+- Tests: native timeline suite, valgrind, benchmarks; integration tests in the real app on Android emulators and on Windows.
+
 ## CUTLAB 0.4.2 — Android preview crash: root cause fixed (2026-11-08)
 
 - Fixed the crash when previewing on Android. The audio decoder freed an uninitialised channel layout, and on some phones that crashed the app as soon as the sound started. Found from the crash report of the owner's phone.

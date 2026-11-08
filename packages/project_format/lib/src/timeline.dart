@@ -748,9 +748,22 @@ extension TimelineEdits on Project {
     ]);
   }
 
-  Project updateTrack(String trackId, {bool? locked, bool? hidden, bool? muted, String? name}) => _withTracks([
-        for (final t in tracks) t.id == trackId ? t.copyWith(locked: locked, hidden: hidden, muted: muted, name: name) : t,
+  /// Track switches and mix settings. [volume] is clamped to 0–2.
+  /// (Mixing — mute, solo, volume — also works on locked tracks: locking
+  /// protects the clips, not the monitoring.)
+  Project updateTrack(String trackId, {bool? locked, bool? hidden, bool? muted, bool? solo, double? volume, String? name}) =>
+      _withTracks([
+        for (final t in tracks)
+          t.id == trackId
+              ? t.copyWith(locked: locked, hidden: hidden, muted: muted, solo: solo, volume: volume?.clamp(0.0, 2.0), name: name)
+              : t,
       ]);
+
+  /// Gain of the whole mix, clamped to 0–2.
+  Project setMasterVolume(double volume) => copyWith(masterVolume: volume.clamp(0.0, 2.0));
+
+  /// Whether [track] is heard: not muted, and soloed if any track is.
+  bool isAudible(Track track) => !track.muted && (track.solo || !tracks.any((t) => t.solo));
 
   /// Moves a track up/down in the stacking order.
   Project reorderTrack(String trackId, int newIndex) {

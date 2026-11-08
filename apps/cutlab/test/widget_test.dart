@@ -280,6 +280,74 @@ void main() {
     expect(h.media.closed, contains('/v/clip.mp4'), reason: 'the file is released after the viewer closes');
   });
 
+  testWidgets('timeline playback: transport, cursor follows the clock, mixer reaches the renderer', (tester) async {
+    final engine = FakeMediaEngine();
+    final h = Harness(engine: engine);
+    final p = await h.store.create(name: 'Play', mode: EditorMode.advanced);
+    await h.store.save(p.copyWith(media: [video('clip.mp4', uri: '/v/clip.mp4', durationMs: 20000).toMediaRef('m1')]));
+    engine.probes['/v/clip.mp4'] = videoProbe(seconds: 20);
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('addToTimeline-m1')));
+    await tester.pumpAndSettle();
+    final tl = engine.timelines.single;
+    expect(tl.plan, contains('clip '), reason: 'the clip is sent to the renderer');
+
+    await tester.tap(find.byKey(const Key('tlPlay')));
+    await tester.pump();
+    expect(tl.playing, isTrue);
+    tl.position = 3 * ticksPerSecond;
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.textContaining('00:00:03:00'), findsWidgets, reason: 'the cursor follows the renderer clock');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(tl.playing, isFalse);
+    expect(tl.seeks.last.$1, 3 * ticksPerSecond, reason: 'paused exactly under the cursor');
+
+    // L plays from 3 s; Shift+Space stops and goes back to 3 s.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+    await tester.pump();
+    expect(tl.playing, isTrue);
+    tl.position = 5 * ticksPerSecond;
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.textContaining('00:00:05:00'), findsWidgets);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(tl.playing, isFalse);
+    expect(find.textContaining('00:00:03:00'), findsWidgets);
+
+    // Mixer: mute, solo and volume change what the renderer plays.
+    await tester.tap(find.text('Mixer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mute-a1')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tl.plan, contains('track a1 audio 1 0 0 '));
+    await tester.tap(find.byKey(const Key('solo-v1')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tl.plan, contains('track v1 video 0 1 0 '));
+    await tester.drag(find.byKey(const Key('volume-master')), const Offset(-80, 0));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tl.plan, isNot(contains('master 1.0000')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('phone layout has a mixer tab', (tester) async {
+    final h = Harness();
+    await h.store.create(name: 'Phone mix');
+    await h.pump(tester, phone);
+    await tester.tap(find.text('Phone mix'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'Mixer'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mixer-master')), findsOneWidget);
+    expect(find.byKey(const Key('mute-a1')), findsOneWidget);
+    expect(find.byKey(const Key('solo-a1')), findsNothing, reason: 'solo is an advanced tool');
+  });
+
   testWidgets('the preview pauses when the app goes to the background', (tester) async {
     final engine = FakeMediaEngine();
     final h = Harness(engine: engine);

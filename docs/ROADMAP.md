@@ -56,9 +56,16 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ✅ Android emulator tests (API 28/34) inside the real app; stress test; crash-report test
 - ⚠️ Not yet confirmed on the owner's phone
 
-## Phase 5 — Core editing ⬜
+## Phase 5 — Timeline playback & audio engine ✅ (verified in CI and on emulators; owner device check pending)
 
-Text clips and styling in the preview, audio tracks/fades/volume, transitions, basic effects stack, keyframes with linear/ease/bezier interpolation, crop/resize/rotate/flip/position/opacity.
+- ✅ Native timeline renderer: continuous playback across cuts, gaps, overlaps, photos; next clip prepared ahead; frame-accurate seeks; cursor follows the audio clock
+- ✅ Real-time mixer: all audible clips and tracks, clip/track/master gain, mute, solo, fades, mono at full level, clipping guard, level meters
+- ✅ Audio-clocked A/V sync (no drift on long files), playback diagnostics
+- ✅ Transport under the monitor, Mixer panel/tab, Space/K/L/Shift+Space, live slider changes as one undo step
+- ✅ Tests: 127-check native timeline suite (Linux, Windows, emulators, valgrind), Dart/widget tests, integration test in the real app on Android emulators and Windows
+- ➡️ Moved to later phases: picture compositing/transitions/effects/keyframes, title styling, clip speed (they were listed here before the phase was redefined)
+- ⚠️ Not yet measured on the owner's phone and PC
+
 
 ## Phase 6 — Export ⬜
 
@@ -83,4 +90,4 @@ Final testing on the owner's phone and PC, documentation, stable APK and Windows
 ## Exact next step
 
 1. **Owner device check** of the `dev` build 0.4.1: preview the videos that crashed before, on the phone. If CUTLAB still closes, reopen it and save the report from Settings → Diagnostics.
-2. **Phase 5, item 1:** native timeline renderer — continuous playback of the edited timeline with all audio tracks mixed (volume, fades, mute audible).
+2. **Phase 6:** export (MP4/H.264 + the Phase 5 mix), reusing the timeline renderer and `cutlab_timeline_render_audio`.

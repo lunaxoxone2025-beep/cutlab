@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <mutex>
 #include <thread>
 
 #include "../diag/diag.hpp"
@@ -10,6 +11,7 @@
 #include "json.hpp"
 #include "player.hpp"
 #include "probe.hpp"
+#include "timeline.hpp"
 #include "video_decoder.hpp"
 
 #ifndef _WIN32
@@ -108,6 +110,13 @@ std::string hardware_self_test(const Source& src) {
 }
 
 }  // namespace cutlab::media
+
+struct cutlab_timeline {
+  TimelinePlayer player;
+  std::mutex offline_mu;
+  Mixer offline;  // render_audio(): independent of playback
+  explicit cutlab_timeline(TimelineOptions o) : player(o) {}
+};
 
 struct cutlab_player {
   Player player;
@@ -293,6 +302,85 @@ cutlab_status cutlab_player_stats(cutlab_player* p, char** out_json) {
   return guarded([&] {
     *out_json = dup_string(p->player.stats_json());
     if (!*out_json) throw std::bad_alloc();
+  });
+}
+
+cutlab_status cutlab_timeline_open(int32_t max_w, int32_t max_h, int32_t flags, cutlab_timeline** out) {
+  if (!out) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    TimelineOptions o;
+    if (max_w > 0) o.max_width = max_w;
+    if (max_h > 0) o.max_height = max_h;
+    o.null_audio_device = (flags & CUTLAB_PLAYER_NULL_AUDIO) != 0;
+    *out = new cutlab_timeline(o);
+  });
+}
+
+void cutlab_timeline_close(cutlab_timeline* t) {
+  try {
+    delete t;
+  } catch (...) {
+  }
+}
+
+cutlab_status cutlab_timeline_set_plan(cutlab_timeline* t, const char* plan) {
+  if (!t || !plan) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] { t->player.set_plan(std::make_shared<const TlPlan>(TlPlan::parse(plan))); });
+}
+
+void cutlab_timeline_play(cutlab_timeline* t) {
+  if (t) safe([&] { t->player.play(); return 0; }, 0);
+}
+void cutlab_timeline_pause(cutlab_timeline* t) {
+  if (t) safe([&] { t->player.pause(); return 0; }, 0);
+}
+int32_t cutlab_timeline_playing(cutlab_timeline* t) { return t ? safe([&] { return t->player.playing() ? 1 : 0; }, 0) : 0; }
+void cutlab_timeline_seek(cutlab_timeline* t, int64_t ticks, int32_t accurate) {
+  if (t) safe([&] { t->player.seek(ticks, accurate != 0); return 0; }, 0);
+}
+int64_t cutlab_timeline_position(cutlab_timeline* t) { return t ? safe([&] { return t->player.position(); }, int64_t{0}) : 0; }
+int64_t cutlab_timeline_duration(cutlab_timeline* t) { return t ? safe([&] { return t->player.duration(); }, int64_t{0}) : 0; }
+
+int32_t cutlab_timeline_frame(cutlab_timeline* t, uint64_t* serial, uint8_t* dst, int64_t capacity, int32_t* out_w, int32_t* out_h,
+                              int64_t* out_pts) {
+  if (!t || !serial) return 0;
+  return safe(
+      [&]() -> int32_t {
+        int w = 0, h = 0;
+        Ticks pts = 0;
+        const bool ok = t->player.frame(serial, dst, capacity > 0 ? static_cast<size_t>(capacity) : 0, &w, &h, &pts);
+        if (out_w) *out_w = w;
+        if (out_h) *out_h = h;
+        if (out_pts) *out_pts = pts;
+        return ok ? 1 : 0;
+      },
+      int32_t{0});
+}
+
+int32_t cutlab_timeline_levels(cutlab_timeline* t, float* out, int32_t capacity) {
+  if (!t || !out || capacity <= 0) return 0;
+  return safe([&] { return static_cast<int32_t>(t->player.levels(out, static_cast<size_t>(capacity))); }, int32_t{0});
+}
+
+cutlab_status cutlab_timeline_stats(cutlab_timeline* t, char** out_json) {
+  if (!t || !out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    *out_json = dup_string(t->player.stats_json());
+    if (!*out_json) throw std::bad_alloc();
+  });
+}
+
+cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_ticks, int32_t frames, float* out, float* peaks,
+                                           int32_t peaks_capacity) {
+  if (!t || !out || frames <= 0) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    auto plan = t->player.plan();
+    std::vector<float> p(plan->tracks.size() + 1, 0.0f);
+    std::lock_guard<std::mutex> lock(t->offline_mu);
+    t->offline.render(*plan, ticks_to_samples(start_ticks), static_cast<size_t>(frames), out, p.data(), &p.back());
+    if (peaks) {
+      for (int32_t i = 0; i < peaks_capacity && i < static_cast<int32_t>(p.size()); ++i) peaks[i] = p[static_cast<size_t>(i)];
+    }
   });
 }
 

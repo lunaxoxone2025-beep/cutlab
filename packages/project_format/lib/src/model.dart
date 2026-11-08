@@ -381,6 +381,12 @@ class Track {
   final bool hidden;
   final bool muted;
 
+  /// Only soloed tracks are heard while any track is soloed.
+  final bool solo;
+
+  /// Track gain, 0–2 (1 = unchanged), applied after the clip volume.
+  final double volume;
+
   /// Optional group id; tracks sharing it move/lock together.
   final String? group;
 
@@ -394,19 +400,23 @@ class Track {
     this.locked = false,
     this.hidden = false,
     this.muted = false,
+    this.solo = false,
+    this.volume = 1.0,
     this.group,
     this.clips = const [],
   });
 
   int get endTicks => clips.isEmpty ? 0 : clips.map((c) => c.endTicks).reduce((a, b) => a > b ? a : b);
 
-  Track copyWith({String? name, bool? locked, bool? hidden, bool? muted, List<Clip>? clips}) => Track(
+  Track copyWith({String? name, bool? locked, bool? hidden, bool? muted, bool? solo, double? volume, List<Clip>? clips}) => Track(
         id: id,
         kind: kind,
         name: name ?? this.name,
         locked: locked ?? this.locked,
         hidden: hidden ?? this.hidden,
         muted: muted ?? this.muted,
+        solo: solo ?? this.solo,
+        volume: volume ?? this.volume,
         group: group,
         clips: clips ?? this.clips,
       );
@@ -418,6 +428,8 @@ class Track {
         'locked': locked,
         'hidden': hidden,
         'muted': muted,
+        'solo': solo,
+        'volume': volume,
         if (group != null) 'group': group,
         'clips': [for (final c in clips) c.toJson()],
       };
@@ -431,6 +443,8 @@ class Track {
       locked: r.boolean('locked', fallback: false),
       hidden: r.boolean('hidden', fallback: false),
       muted: r.boolean('muted', fallback: false),
+      solo: r.boolean('solo', fallback: false),
+      volume: r.number('volume', fallback: 1.0),
       group: r.optString('group'),
       clips: clips,
     );
@@ -507,6 +521,9 @@ class Project {
   final List<Marker> markers;
   final ExportSettings exportSettings;
 
+  /// Gain of the whole mix, 0–2 (1 = unchanged).
+  final double masterVolume;
+
   const Project({
     required this.id,
     required this.name,
@@ -518,6 +535,7 @@ class Project {
     this.tracks = const [],
     this.markers = const [],
     this.exportSettings = const ExportSettings(),
+    this.masterVolume = 1.0,
   });
 
   /// A new empty project with one video, one audio and one text track.
@@ -554,6 +572,7 @@ class Project {
     List<Track>? tracks,
     List<Marker>? markers,
     ExportSettings? exportSettings,
+    double? masterVolume,
   }) =>
       Project(
         id: id ?? this.id,
@@ -566,6 +585,7 @@ class Project {
         tracks: tracks ?? this.tracks,
         markers: markers ?? this.markers,
         exportSettings: exportSettings ?? this.exportSettings,
+        masterVolume: masterVolume ?? this.masterVolume,
       );
 
   Map<String, Object?> toJson() => {
@@ -579,6 +599,7 @@ class Project {
         'tracks': [for (final t in tracks) t.toJson()],
         'markers': [for (final m in markers) m.toJson()],
         'exportSettings': exportSettings.toJson(),
+        'masterVolume': masterVolume,
       };
 
   static Project fromReader(JsonReader r) {
@@ -599,6 +620,7 @@ class Project {
       tracks: r.list('tracks', Track.fromReader),
       markers: r.list('markers', Marker.fromReader),
       exportSettings: r.has('exportSettings') ? ExportSettings.fromReader(r.object('exportSettings')) : const ExportSettings(),
+      masterVolume: r.number('masterVolume', fallback: 1.0),
     );
   }
 }
