@@ -169,7 +169,8 @@ class ExportController extends ChangeNotifier {
     try {
       final (w, h) = outputSize;
       final plan = await _plan(w, h);
-      final text = '${s.engineText(path: target, width: w, height: h)}encoder ${order.map((e) => '${e.name}/${e.hardware ? 'hw' : 'sw'}').join(',')}\n';
+      final text =
+          '${s.engineText(path: target, width: w, height: h)}encoder ${order.map((e) => '${e.name}/${e.hardware ? 'hw' : 'sw'}').join(',')}\n';
       _job = engine.startExport(plan, text);
     } on Object catch (e) {
       _fail('The export could not start: $e');
