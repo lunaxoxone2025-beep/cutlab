@@ -48,21 +48,85 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('apps/web/manifest.webmanifest','utf8')); console.log('manifest ok')"
           for f in index.html style.css app.js sw.js icon-192.png icon-512.png icon-maskable.png; do test -f "apps/web/$f" || { echo "missing apps/web/$f"; exit 1; }; done
 
-  core-cpp:
-    name: C++ core (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  test-media:
+    name: Engine test media
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: build/test-media
+          key: test-media-${{ hashFiles('scripts/make_test_media.sh') }}
+      - name: Generate
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          scripts/make_test_media.sh build/test-media
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-media
+          path: build/test-media
+          retention-days: 3
+
+  core-linux:
+    name: C++ core + media engine (Linux)
+    needs: test-media
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-media
+          path: build/test-media
+      - id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-linux
+          key: ffmpeg-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
+      - name: Build FFmpeg (static, LGPL)
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev
+          WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
       - name: Configure
-        run: cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WARNINGS_AS_ERRORS=ON
+        run: cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WARNINGS_AS_ERRORS=ON -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
+      - name: Build
+        run: cmake --build build/core --config Release -j 4
+      - name: Test
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+        run: ctest --test-dir build/core -C Release --output-on-failure -V
+
+  core-windows:
+    name: C++ core + media engine (Windows x64)
+    needs: test-media
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-media
+          path: build/test-media
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Fetch FFmpeg (LGPL, shared)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ffmpeg/fetch_ffmpeg_windows.ps1 -Dest build/ffmpeg-win64
+      - name: Configure
+        run: cmake -S core -B build/core -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_SHARED=ON -DCUTLAB_FFMPEG_ROOT=${{ github.workspace }}/build/ffmpeg-win64
       - name: Build
         run: cmake --build build/core --config Release
       - name: Test
-        run: ctest --test-dir build/core -C Release --output-on-failure
+        shell: pwsh
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+        run: |
+          $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
+          ctest --test-dir build/core -C Release --output-on-failure -V
 
   dart-packages:
     name: Dart package — project_format
