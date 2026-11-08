@@ -804,7 +804,11 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   venc->colorspace = AVCOL_SPC_BT709;
   venc->color_range = AVCOL_RANGE_MPEG;
   venc->thread_count = s.threads;
-  if (run.fmt->oformat->flags & AVFMT_GLOBALHEADER) venc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+  // MediaCodec: FFmpeg makes the global header by encoding a dummy frame,
+  // ending the stream and flushing; Android's encoders then produce nothing
+  // more (seen on the emulators). The parameter sets come with the first
+  // packet instead, and the MP4/MKV muxers take them from there.
+  if ((run.fmt->oformat->flags & AVFMT_GLOBALHEADER) && !name_has(enc_info.name, "_mediacodec")) venc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
   {
     AVDictionary* opt = nullptr;
     configure_video(venc, enc_info.name, s, enc_info.hardware, &opt);

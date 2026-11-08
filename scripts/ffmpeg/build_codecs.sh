@@ -132,6 +132,14 @@ if ! grep -q 'cutlab: opened only' "$RDO"; then
   sed -i 's|      fclose(curr);|      fclose(curr);\n      fastrd_learning_outfile[i] = NULL;|' "$RDO"
   grep -q 'cutlab: opened only' "$RDO" || { echo "kvazaar patch did not apply" >&2; exit 1; }
 fi
+# kvazaar runs XGETBV when the CPU has XSAVE *or* the OS enabled it; XGETBV
+# needs OSXSAVE, so CPUs/VMs without it (the Android 9 emulator) get SIGILL
+# when an HEVC export starts. Require both bits.
+SEL="$WORK/kvazaar/src/strategyselector.c"
+if ! grep -q 'cutlab: both bits' "$SEL"; then
+  sed -i 's|    if (cpuid1.ecx \& (CPUID1_ECX_XSAVE \| CPUID1_ECX_OSXSAVE)) {|    if ((cpuid1.ecx \& (CPUID1_ECX_XSAVE \| CPUID1_ECX_OSXSAVE)) == (CPUID1_ECX_XSAVE \| CPUID1_ECX_OSXSAVE)) { /* cutlab: both bits */|' "$SEL"
+  grep -q 'cutlab: both bits' "$SEL" || { echo "kvazaar cpuid patch did not apply" >&2; exit 1; }
+fi
 cmake_build "$WORK/kvazaar" "$WORK/kvazaar-build" -DBUILD_TESTS=OFF -DBUILD_KVAZAAR_BINARY=OFF -DUSE_CRYPTO=OFF
 
 # --- SVT-AV1 (software AV1; desktop only: far too slow on phones)
