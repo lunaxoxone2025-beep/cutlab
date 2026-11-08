@@ -96,6 +96,13 @@ class MediaRef {
   final String? fingerprint;
   final String? proxyUri;
 
+  /// File size in bytes, when known.
+  final int? sizeBytes;
+
+  /// True when duration/dimensions have not been read from the file yet
+  /// (the media engine fills them in and clears the flag).
+  final bool needsProbe;
+
   const MediaRef({
     required this.id,
     required this.kind,
@@ -108,7 +115,27 @@ class MediaRef {
     this.hasAudio = false,
     this.fingerprint,
     this.proxyUri,
+    this.sizeBytes,
+    this.needsProbe = false,
   });
+
+  /// Points this reference at another file while keeping its id, so every
+  /// clip that uses it follows (relinking).
+  MediaRef relinkedTo(MediaRef other) => MediaRef(
+        id: id,
+        kind: other.kind,
+        uri: other.uri,
+        displayName: other.displayName,
+        durationTicks: other.durationTicks,
+        width: other.width,
+        height: other.height,
+        frameRate: other.frameRate,
+        hasAudio: other.hasAudio,
+        fingerprint: other.fingerprint,
+        proxyUri: null,
+        sizeBytes: other.sizeBytes,
+        needsProbe: other.needsProbe,
+      );
 
   Map<String, Object?> toJson() => {
         'id': id,
@@ -122,6 +149,8 @@ class MediaRef {
         'hasAudio': hasAudio,
         if (fingerprint != null) 'fingerprint': fingerprint,
         if (proxyUri != null) 'proxyUri': proxyUri,
+        if (sizeBytes != null) 'sizeBytes': sizeBytes,
+        if (needsProbe) 'needsProbe': true,
       };
 
   static MediaRef fromReader(JsonReader r) => MediaRef(
@@ -136,6 +165,8 @@ class MediaRef {
         hasAudio: r.boolean('hasAudio', fallback: false),
         fingerprint: r.optString('fingerprint'),
         proxyUri: r.optString('proxyUri'),
+        sizeBytes: r.optInteger('sizeBytes'),
+        needsProbe: r.boolean('needsProbe', fallback: false),
       );
 }
 
@@ -461,10 +492,15 @@ class Project {
     );
   }
 
+  /// Number of clips (on any track) that use the media with [mediaId].
+  int clipsUsingMedia(String mediaId) => tracks.fold(0, (n, t) => n + t.clips.where((c) => c.mediaId == mediaId).length);
+
   /// Timeline length: end of the last clip on any track.
   int get durationTicks => tracks.fold(0, (m, t) => t.endTicks > m ? t.endTicks : m);
 
   Project copyWith({
+    String? id,
+    DateTime? createdAt,
     String? name,
     DateTime? modifiedAt,
     EditorMode? editorMode,
@@ -475,9 +511,9 @@ class Project {
     ExportSettings? exportSettings,
   }) =>
       Project(
-        id: id,
+        id: id ?? this.id,
         name: name ?? this.name,
-        createdAt: createdAt,
+        createdAt: createdAt ?? this.createdAt,
         modifiedAt: modifiedAt ?? this.modifiedAt,
         editorMode: editorMode ?? this.editorMode,
         settings: settings ?? this.settings,

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'home_screen.dart';
+import 'screens/library_screen.dart';
+import 'services.dart';
 import 'theme.dart';
 
 class CutlabApp extends StatelessWidget {
-  const CutlabApp({super.key});
+  const CutlabApp({super.key, required this.services});
+
+  final AppServices services;
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +15,7 @@ class CutlabApp extends StatelessWidget {
       title: 'CUTLAB',
       debugShowCheckedModeBanner: false,
       theme: buildCutlabTheme(),
-      home: const HomeScreen(),
+      home: LibraryScreen(services: services),
     );
   }
 }

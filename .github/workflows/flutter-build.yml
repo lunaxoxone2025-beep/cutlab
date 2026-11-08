@@ -1,11 +1,10 @@
 name: Flutter builds
 
-# Builds the Flutter edition on every platform and uploads the results as
-# workflow artifacts (development builds, not releases).
+# Builds the Flutter edition for Android and PC (Windows, Linux) and publishes
+# the installable files to the rolling "dev" release (personal use).
 #
-# Platform folders (android/, linux/, windows/, macos/) are generated with
-# `flutter create` at build time until Phase 3 adds native code to them;
-# see docs/BUILDING.md.
+# Platform folders are generated with `flutter create` at build time; custom
+# native code lives in apps/cutlab/platform_overlay/ and is copied on top.
 on:
   push:
     branches: [main]
@@ -13,12 +12,8 @@ on:
       - 'apps/cutlab/**'
       - 'packages/**'
       - 'core/**'
+      - 'android-signing/**'
       - '.github/workflows/flutter-build.yml'
-  pull_request:
-    paths:
-      - 'apps/cutlab/**'
-      - 'packages/**'
-      - 'core/**'
   workflow_dispatch:
 
 concurrency:
@@ -29,10 +24,11 @@ env:
   FLUTTER_VERSION: '3.24.5'
   # Distinct from CutLab Lite (com.lunaxoxone.cutlab) so both can be installed side by side.
   FLUTTER_ORG: com.lunaxoxone.studio
+  BUILD_NAME: 0.2.${{ github.run_number }}
 
 jobs:
   android:
-    name: Android (APK debug + release, AAB)
+    name: Android APK
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,48 +44,23 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Generate platform folder
-        run: flutter create --platforms=android --org "$FLUTTER_ORG" --project-name cutlab .
-      - run: flutter pub get
-      - name: Build debug APK
-        run: flutter build apk --debug
-      - name: Build release APK and App Bundle (development signing)
+      - name: Generate platform folder + native overlay
         run: |
-          flutter build apk --release
-          flutter build appbundle --release
+          flutter create --platforms=android --org "$FLUTTER_ORG" --project-name cutlab .
+          cp -R platform_overlay/android/. android/
+      - name: Use the fixed signing key (updates install over older builds)
+        run: |
+          mkdir -p ~/.android
+          cp "$GITHUB_WORKSPACE/android-signing/cutlab.keystore" ~/.android/debug.keystore
+      - run: flutter pub get
+      - name: Build APK
+        run: flutter build apk --release --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
+      - name: Rename
+        run: cp build/app/outputs/flutter-apk/app-release.apk CUTLAB.apk
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-android
-          path: |
-            apps/cutlab/build/app/outputs/flutter-apk/app-debug.apk
-            apps/cutlab/build/app/outputs/flutter-apk/app-release.apk
-            apps/cutlab/build/app/outputs/bundle/release/app-release.aab
-          if-no-files-found: error
-
-  linux:
-    name: Linux
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/cutlab
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter create --platforms=linux --org "$FLUTTER_ORG" --project-name cutlab .
-      - run: flutter pub get
-      - run: flutter build linux --release
-      - name: Package
-        run: tar -C build/linux/x64/release/bundle -czf cutlab-linux-x64.tar.gz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cutlab-linux-x64
-          path: apps/cutlab/cutlab-linux-x64.tar.gz
+          path: apps/cutlab/CUTLAB.apk
           if-no-files-found: error
 
   windows:
@@ -109,36 +80,66 @@ jobs:
           cache: true
       - run: flutter create --platforms=windows --org "${{ env.FLUTTER_ORG }}" --project-name cutlab .
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release --build-name "${{ env.BUILD_NAME }}" --build-number "${{ github.run_number }}"
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath cutlab-windows-x64.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath CUTLAB-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-windows-x64
-          path: apps/cutlab/cutlab-windows-x64.zip
+          path: apps/cutlab/CUTLAB-windows-x64.zip
           if-no-files-found: error
 
-  macos:
-    name: macOS
-    runs-on: macos-latest
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/cutlab
     steps:
       - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter create --platforms=macos --org "$FLUTTER_ORG" --project-name cutlab .
+      - run: flutter create --platforms=linux --org "$FLUTTER_ORG" --project-name cutlab .
       - run: flutter pub get
-      - run: flutter build macos --release
+      - run: flutter build linux --release --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
       - name: Package
-        run: ditto -c -k --keepParent build/macos/Build/Products/Release/cutlab.app cutlab-macos.zip
+        run: tar -C build/linux/x64/release/bundle -czf CUTLAB-linux-x64.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: cutlab-macos
-          path: apps/cutlab/cutlab-macos.zip
+          name: cutlab-linux-x64
+          path: apps/cutlab/CUTLAB-linux-x64.tar.gz
           if-no-files-found: error
+
+  publish:
+    name: Publish to the "dev" release
+    needs: [android, windows, linux]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Replace the dev release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la dist
+          gh release delete dev --cleanup-tag --yes || true
+          cat > notes.md <<EOF
+          Development build **${BUILD_NAME}** from commit ${GITHUB_SHA::7}.
+
+          - **Android:** download \`CUTLAB.apk\` on the phone and install it. Newer builds install over older ones and keep your projects.
+          - **Windows:** unzip \`CUTLAB-windows-x64.zip\` and run \`cutlab.exe\`.
+          - **Linux:** extract \`CUTLAB-linux-x64.tar.gz\` and run \`./cutlab\`.
+          EOF
+          gh release create dev dist/* --target "$GITHUB_SHA" --prerelease --title "CUTLAB dev ${BUILD_NAME}" --notes-file notes.md

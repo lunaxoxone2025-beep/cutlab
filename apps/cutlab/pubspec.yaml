@@ -1,7 +1,7 @@
 name: cutlab
 description: CUTLAB — cross-platform video editor (Flutter edition).
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.5.0
@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   cutlab_project_format:
     path: ../../packages/project_format
+  file_picker: ^8.1.2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:

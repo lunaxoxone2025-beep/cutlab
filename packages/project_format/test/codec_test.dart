@@ -157,4 +157,41 @@ void main() {
     expect(p.markers.single.label, 'Triple kill');
     expect(() => const ProjectCodec(targetVersion: 3).decode(jsonEncode(d)), throwsA(isA<ProjectFormatException>()));
   });
+
+  test('media flags round trip and relinking keeps the id', () {
+    const unprobed = MediaRef(
+      id: 'm2',
+      kind: MediaKind.video,
+      uri: 'C:/Videos/raw.mkv',
+      displayName: 'raw.mkv',
+      durationTicks: 0,
+      sizeBytes: 123456789,
+      needsProbe: true,
+    );
+    final p = sampleProject().copyWith(media: [...sampleProject().media, unprobed]);
+    final back = codec.decode(codec.encode(p));
+    expect(back.media.last.needsProbe, isTrue);
+    expect(back.media.last.sizeBytes, 123456789);
+    expect(back.media.first.needsProbe, isFalse);
+
+    final moved = back.media.first.relinkedTo(const MediaRef(
+      id: 'ignored',
+      kind: MediaKind.video,
+      uri: 'D:/new/match01.mp4',
+      displayName: 'match01.mp4',
+      durationTicks: 42,
+    ));
+    expect(moved.id, 'm1');
+    expect(moved.uri, 'D:/new/match01.mp4');
+    expect(back.clipsUsingMedia('m1'), 2);
+    expect(back.clipsUsingMedia('m2'), 0);
+  });
+
+  test('copyWith can assign a new identity (duplicate project)', () {
+    final p = sampleProject();
+    final copy = p.copyWith(id: 'p2', name: 'Copy', createdAt: DateTime.utc(2027));
+    expect(copy.id, 'p2');
+    expect(copy.createdAt, DateTime.utc(2027));
+    expect(copy.tracks.length, p.tracks.length);
+  });
 }
