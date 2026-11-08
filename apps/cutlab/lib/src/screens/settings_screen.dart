@@ -29,7 +29,7 @@ class SettingsScreen extends StatelessWidget {
                 ButtonSegment(value: EditorMode.advanced, label: Text('Advanced')),
               ],
               selected: {s.defaultMode},
-              onSelectionChanged: (v) => services.updateSettings(s.copyWith(defaultMode: v.first)),
+              onSelectionChanged: (v) => services.updateSettings(services.settings.value.copyWith(defaultMode: v.first)),
             ),
             const SizedBox(height: CutlabSpacing.xl),
             const Text('Autosave unsaved changes after', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -46,7 +46,7 @@ class SettingsScreen extends StatelessWidget {
                   ChoiceChip(
                     label: Text('$secs s'),
                     selected: s.autosaveSeconds == secs,
-                    onSelected: (_) => services.updateSettings(s.copyWith(autosaveSeconds: secs)),
+                    onSelected: (_) => services.updateSettings(services.settings.value.copyWith(autosaveSeconds: secs)),
                   ),
               ],
             ),

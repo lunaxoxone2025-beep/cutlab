@@ -52,6 +52,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('projectName')), 'Ranked highlights');
     await tester.tap(find.text('9:16 · Shorts / Reels'));
+    await tester.pump();
     await tester.tap(find.text('60'));
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('createProject')));
