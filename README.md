@@ -1,43 +1,29 @@
 # CUTLAB ✂️
 
-A cross-platform video editor for gaming creators and everyday editing — approachable like a mobile editor, with a professional multi-track workspace for long-form projects.
+Personal video editor for Android and PC (Windows/Linux) — approachable like a mobile editor, with a professional multi-track workspace for long gameplay recordings. Private project; not published or distributed.
 
 [![CI](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml)
 [![Flutter builds](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml)
 
-## Two editions
+## Install
 
-| | **CutLab Lite** (available now) | **CUTLAB** (Flutter + C++, in development) |
+| | **CUTLAB** (new, in development) | **CutLab Lite** (current everyday editor) |
 |---|---|---|
-| Where | Android APK · any browser | Android, Windows, Linux, macOS |
-| Status | Usable editor | Phase 1 of 10 complete — foundation only, no media editing yet |
-| Code | `apps/web/` | `apps/cutlab/`, `core/`, `packages/` |
+| Android | [`CUTLAB.apk`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB.apk) | [`CutLab.apk`](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk) |
+| Windows | [`CUTLAB-windows-x64.zip`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB-windows-x64.zip) → unzip → `cutlab.exe` | — |
+| Linux | [`CUTLAB-linux-x64.tar.gz`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB-linux-x64.tar.gz) | — |
 
-### 📲 Install CutLab Lite on Android
+Both Android apps can be installed side by side. Newer builds install over older ones and keep projects. If the repository is private, open the links while signed in to GitHub.
 
-**[⬇️ Download CutLab.apk](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk)** — open it on your phone and tap **Install** (allow "install unknown apps" for your browser if Android asks).
+## Status
 
-Web version: https://lunaxoxone2025-beep.github.io/cutlab/
+**CUTLAB** — Phase 2 of 10: project library, `.cutlab` save/open with autosave and crash recovery, media import (Android without copying files), missing-media relink, settings. Playback, timeline editing and export arrive in Phases 3–6 ([roadmap](docs/ROADMAP.md)). Until then, **CutLab Lite** (`apps/web/`) remains the editor for finished videos.
 
-Lite features: timeline with video, text and audio lanes · trim, split, duplicate, reorder · speed 0.1×–4× · 10 filters and colour adjustments · 8 transitions · Ken Burns motion · animated text with templates · music with fades · 9:16 / 16:9 / 1:1 / 4:5 / 3:4 · undo/redo · autosave · export 480p–1080p. Everything runs on your device; videos are never uploaded.
+## Code
 
-## CUTLAB (new edition)
+- `apps/cutlab/` — Flutter app (UI, storage, platform glue; native Android code in `platform_overlay/`)
+- `core/` — C++17 engine (exact frame time math; media engine from Phase 3)
+- `packages/project_format/` — `.cutlab` format: model, codec, validation, migrations
+- `apps/web/` — CutLab Lite
 
-- **Flutter** UI shared by phone, tablet and desktop, with **beginner** and **advanced** modes over the same project data.
-- **C++ core** for decoding, compositing, audio and export, reached through a small C ABI (`dart:ffi`).
-- **Frame-exact time**: every timestamp is an integer (705,600,000 ticks per second).
-- **`.cutlab`** versioned JSON project format; media is referenced, never copied.
-
-Development builds (APK/AAB, Linux, Windows, macOS) are attached to each run of the *Flutter builds* workflow. They currently contain the application shell only.
-
-## Documentation
-
-- [Architecture and decisions](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Project format](docs/PROJECT_FORMAT.md)
-- [Building](docs/BUILDING.md)
-- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
-
-## License
-
-Not yet chosen — see the open decision in `docs/ARCHITECTURE.md` (D8 covers codec licensing). Until a license is added, all rights are reserved by the repository owner.
+Docs: [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Project format](docs/PROJECT_FORMAT.md) · [Building](docs/BUILDING.md) · [Changelog](CHANGELOG.md)

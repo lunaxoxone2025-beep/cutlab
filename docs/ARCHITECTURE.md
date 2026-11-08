@@ -1,6 +1,6 @@
 # CUTLAB architecture
 
-Status: **Phase 1 (foundation)** — November 2026. This document records the decisions taken and why; it is updated whenever a decision changes.
+Status: **Phase 2 (application foundation)** — November 2026. This document records the decisions taken and why; it is updated whenever a decision changes.
 
 ## 1. Starting point (audit of the repository, Phase 1)
 
@@ -68,7 +68,11 @@ What Lite cannot become, and why a new engine is needed:
 
 **D12 — CutLab Lite stays until parity.** Users keep a working app while the new engine is built. Lite receives fixes, not features. It will be retired (with a project import path) once the Flutter edition can import, edit and export MP4 (end of Phase 6).
 
-**D13 — Generated platform folders (temporary).** Until Phase 3 adds native code, `apps/cutlab/{android,linux,windows,macos}` are generated in CI with `flutter create`, which keeps the repository free of template noise. They will be committed when native integration starts.
+**D13 — Generated platform folders + overlay.** `apps/cutlab/{android,linux,windows}` are generated in CI with `flutter create`; custom native code lives in `apps/cutlab/platform_overlay/<platform>/` and is copied on top (Phase 2: Android `MainActivity.kt` with the media channel). This keeps template noise out of the repository; folders may be committed in full if the overlay grows too large.
+
+**D14 — Personal use only (decided 2026-11-08).** CUTLAB is built for one user on Android and Windows/Linux PCs. No public releases, store listings or community distribution. Consequences: macOS builds are dropped; installable builds go to a rolling **`dev`** pre-release in the (private) repository; the license question and release signing are out of scope; the Lite signing key stays as is (postponed by the owner).
+
+**D15 — Media references on Android are persistable SAF URIs.** Files are opened with `ACTION_OPEN_DOCUMENT` and kept as `content://` URIs with a persistable read grant, so multi-GB recordings are never copied into app storage. Probing (duration, size, rotation-corrected dimensions) and thumbnails use `MediaMetadataRetriever` until the Phase 3 engine replaces them. On PC, media is referenced by absolute path and marked `needsProbe` until the engine reads it.
 
 ## 4. Repository layout
 
@@ -83,7 +87,7 @@ core/                C++17 engine — CMake project, C ABI in include/cutlab/cut
 packages/
   project_format/    Dart: time math, project model, .cutlab codec, validation, migrations
 docs/                ARCHITECTURE, ROADMAP, PROJECT_FORMAT, BUILDING
-android-signing/     Lite APK signing key (to be moved to a secret, §9)
+android-signing/     APK signing key shared by Lite and the Flutter edition (§9)
 .github/workflows/   CI, Flutter builds, Lite APK release, Dart auto-format
 ```
 
@@ -122,7 +126,7 @@ Directories from the master plan that have no code yet (`core/media`, `core/rend
 
 ## 9. Known risks and limitations
 
-1. **Signing key in the repository.** `android-signing/cutlab.keystore` (used by the Lite APK) is public, so anyone could sign an APK that installs as an update of Lite. Fix: move it to an encrypted GitHub Actions secret (requires the repository owner to add the secret) and rotate when the Flutter edition replaces Lite.
+1. **Signing key in the repository** (`android-signing/cutlab.keystore`, used for both APKs so updates install in place). Acceptable for personal use in a private repository; postponed by the owner (D14).
 2. **FFmpeg distribution** on Android/iOS no longer has a maintained prebuilt kit; we will build LGPL FFmpeg ourselves in CI (Phase 3), which is the largest build-system task in the plan.
 3. **Flutter external textures** differ per platform; the preview path is the main Phase 3 integration risk.
 4. **Patent-encumbered codecs** (H.264/HEVC) — see D8.
