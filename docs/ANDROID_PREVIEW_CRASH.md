@@ -24,6 +24,19 @@ if CUTLAB still closes, the next start shows exactly where and why.
 
 The memory figures come from the engine built for Linux with the CPU count set to 8, running preview + 2 monitor decoders + thumbnails at once. Android figures appear in the emulator test log (`memory …` lines).
 
+## Results on Android emulators (fixed code, CI run of 9e9cbf3)
+
+All 21 integration tests and all native tests passed on **API 28** (Android 9) and **API 34** (Android 14). Both emulators are x86_64 with 2 CPUs and 4 GB of RAM.
+
+| | API 28 | API 34 |
+|---|---|---|
+| Hardware check (separate process) | MediaCodec does not start on this image: every kind of video → software | H.264 1080p30/60, portrait, VFR and HEVC 1080p60 pass and use `h264_mediacodec`/`hevc_mediacodec`. HEVC 10-bit 4K and the 720p long file fail to start → software |
+| Playback, every file, hardware on/off | frames delivered, no errors | frames delivered, no errors |
+| Open/close ×25, broken/AV1 files | OK; clear error messages | OK; clear error messages |
+| Full editor: 4 clips on the timeline + preview (process memory, whole app) | timeline 348 MB; previewing 4K HEVC 10-bit 622 MB; peak 638 MB | timeline 398 MB; previewing 4K HEVC 10-bit 612 MB; peak 661 MB |
+
+The "tombstones" in these runs come from `cutlab_crash_report_tests`, which crashes on purpose. They also show that Android's own crash reporter still runs after CUTLAB's handler.
+
 ## What is not proven
 
 - The exact cause on the owner's phone is **not confirmed**: no crash log from the phone was available. Excessive memory use is the most likely cause, a vendor hardware decoder the second. Both are fixed. If CUTLAB still closes, the next start shows a report (see below).
