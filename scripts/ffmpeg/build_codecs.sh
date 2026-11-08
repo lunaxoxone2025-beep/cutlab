@@ -30,7 +30,7 @@ OPUS_TAG=v1.5.2
 VPX_TAG=v1.15.2
 OPENH264_TAG=v2.6.0
 KVAZAAR_TAG=v2.3.1
-SVTAV1_TAG=v3.1.2
+SVTAV1_TAG=v2.3.0
 
 fetch() {  # repo tag dir
   if [ ! -d "$WORK/$3/.git" ]; then

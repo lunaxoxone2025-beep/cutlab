@@ -537,12 +537,31 @@ struct ClipVideo {
 Exporter::Exporter(std::shared_ptr<const TlPlan> plan, ExportSettings settings) : plan_(std::move(plan)), settings_(std::move(settings)) {
   started_ = Clock::now();
   speed_mark_ = started_;
-  worker_ = std::thread([this] { work(); });
+  progress();
 }
 
-Exporter::~Exporter() {
-  cancel();
-  if (worker_.joinable()) worker_.join();
+std::shared_ptr<Exporter> Exporter::start(std::shared_ptr<const TlPlan> plan, ExportSettings settings) {
+  auto e = std::make_shared<Exporter>(std::move(plan), std::move(settings));
+  std::thread([self = e] {
+    self->work();
+    std::lock_guard<std::mutex> lock(self->mu_);
+    self->worker_ended_ = true;
+    self->cv_.notify_all();
+  }).detach();
+  return e;
+}
+
+void Exporter::progress() { last_progress_ns_ = Clock::now().time_since_epoch().count(); }
+
+bool Exporter::stalled_locked() const {
+  if (paused_ || state_ == State::done || state_ == State::failed || state_ == State::cancelled) return false;
+  const auto last = Clock::time_point(Clock::duration(last_progress_ns_.load()));
+  return Clock::now() - last > std::chrono::seconds(kStallSeconds);
+}
+
+bool Exporter::wait_for(int64_t ms) {
+  std::unique_lock<std::mutex> lock(mu_);
+  return cv_.wait_for(lock, std::chrono::milliseconds(ms), [&] { return worker_ended_; });
 }
 
 void Exporter::pause(bool paused) {
@@ -553,6 +572,7 @@ void Exporter::pause(bool paused) {
     paused_since_ = Clock::now();
   } else {
     paused_ns_ += std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - paused_since_).count();
+    progress();  // the pause is not a stall
   }
   cv_.notify_all();
 }
@@ -565,7 +585,7 @@ void Exporter::cancel() {
 
 Exporter::State Exporter::state() const {
   std::lock_guard<std::mutex> lock(mu_);
-  return state_;
+  return stalled_locked() ? State::failed : state_;
 }
 
 bool Exporter::finished() const {
@@ -593,6 +613,8 @@ bool Exporter::wait_if_paused() {
 
 std::string Exporter::status_json() const {
   std::lock_guard<std::mutex> lock(mu_);
+  const bool stalled = stalled_locked();
+  const State state = stalled ? State::failed : state_;
   const auto now = (state_ == State::done || state_ == State::failed || state_ == State::cancelled) ? finished_at_ : Clock::now();
   int64_t paused = paused_ns_;
   if (paused_) paused += std::chrono::duration_cast<std::chrono::nanoseconds>(now - paused_since_).count();
@@ -603,7 +625,7 @@ std::string Exporter::status_json() const {
   const int64_t left = std::max<int64_t>(0, frames_total_ - frames_done_);
   JsonWriter j;
   j.begin_object();
-  j.key("state").value(export_state_name(state_));
+  j.key("state").value(export_state_name(state));
   j.key("paused").value(paused_);
   j.key("framesDone").value(frames_done_);
   j.key("framesTotal").value(frames_total_);
@@ -618,7 +640,10 @@ std::string Exporter::status_json() const {
   j.key("audioEncoder").value(audio_encoder_);
   j.key("restarts").value(restarts_);
   j.key("decodeErrors").value(decode_errors_);
-  j.key("error").value(error_);
+  j.key("error").value(stalled ? encoder_name_ + " stopped responding (nothing for " + std::to_string(kStallSeconds) +
+                                       " s); try another codec or turn hardware encoding off"
+                                 : error_);
+  j.key("stalled").value(stalled);
   j.key("warnings").begin_array();
   for (const auto& w : warnings_) j.value(w);
   j.end_array();
@@ -875,6 +900,7 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
       av_packet_rescale_ts(pkt.get(), ctx->time_base, st->time_base);
       pkt->stream_index = st->index;
       check(av_interleaved_write_frame(run.fmt, pkt.get()), "writing the output file");
+      progress();
       ++written;
     }
   };
@@ -917,6 +943,7 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
       }
       check(r, ctx == venc ? "video encoding" : "audio encoding");
       since = Clock::now();
+      progress();
       if (pkt->size <= 0) {
         av_packet_unref(pkt.get());
         continue;
@@ -1172,6 +1199,7 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
     // Sound up to the end of this frame.
     encode_audio_until(ticks_to_samples(frame_time(n + 1)), false);
 
+    progress();
     std::lock_guard<std::mutex> lock(mu_);
     frames_done_ = n + 1;
     bytes_ = avio_tell(run.fmt->pb);

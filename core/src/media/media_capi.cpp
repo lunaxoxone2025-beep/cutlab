@@ -120,8 +120,14 @@ struct cutlab_timeline {
 };
 
 struct cutlab_export {
-  Exporter exporter;
-  cutlab_export(std::shared_ptr<const TlPlan> plan, ExportSettings s) : exporter(std::move(plan), std::move(s)) {}
+  std::shared_ptr<Exporter> exporter;
+  cutlab_export(std::shared_ptr<const TlPlan> plan, ExportSettings s) : exporter(Exporter::start(std::move(plan), std::move(s))) {}
+  ~cutlab_export() {
+    exporter->cancel();
+    // Normally done at once; an encoder stuck inside its library keeps its
+    // thread (and the exporter) until it returns, without blocking the app.
+    if (!exporter->wait_for(3000)) diag::note("export: the worker did not stop in 3 s; left to finish on its own");
+  }
 };
 
 struct cutlab_player {
@@ -401,17 +407,17 @@ cutlab_status cutlab_export_start(const char* plan, const char* settings, cutlab
 }
 
 void cutlab_export_pause(cutlab_export* e, int32_t paused) {
-  if (e) safe([&] { e->exporter.pause(paused != 0); return 0; }, 0);
+  if (e) safe([&] { e->exporter->pause(paused != 0); return 0; }, 0);
 }
 
 void cutlab_export_cancel(cutlab_export* e) {
-  if (e) safe([&] { e->exporter.cancel(); return 0; }, 0);
+  if (e) safe([&] { e->exporter->cancel(); return 0; }, 0);
 }
 
 cutlab_status cutlab_export_status(cutlab_export* e, char** out_json) {
   if (!e || !out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
   return guarded([&] {
-    *out_json = dup_string(e->exporter.status_json());
+    *out_json = dup_string(e->exporter->status_json());
     if (!*out_json) throw std::bad_alloc();
   });
 }

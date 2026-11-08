@@ -65,23 +65,32 @@ std::string encoders_json(const std::vector<EncoderInfo>& list);
 /// the app uses for its file size estimate (docs/EXPORT.md).
 int64_t quality_bitrate(const std::string& codec, int quality, int width, int height, Rational fps);
 
-class Exporter {
+class Exporter : public std::enable_shared_from_this<Exporter> {
  public:
   enum class State { preparing, rendering, finishing, done, failed, cancelled };
 
-  /// Starts rendering in a background thread.
-  Exporter(std::shared_ptr<const TlPlan> plan, ExportSettings settings);
-  ~Exporter();  // cancels and waits
+  /// Creates the exporter and starts rendering in a background thread.
+  /// The thread keeps the exporter alive until it ends, so an encoder
+  /// library that never returns cannot block whoever lets go of it.
+  static std::shared_ptr<Exporter> start(std::shared_ptr<const TlPlan> plan, ExportSettings settings);
+  Exporter(std::shared_ptr<const TlPlan> plan, ExportSettings settings);  // use start()
   Exporter(const Exporter&) = delete;
   Exporter& operator=(const Exporter&) = delete;
 
   void pause(bool paused);
   void cancel();
+  /// Includes "failed" when the encoder stopped responding (see kStall).
   State state() const;
   bool finished() const;
   std::string status_json() const;
   /// Blocks until finished (tests).
   void wait();
+  /// Waits up to `ms` for the worker to end; true when it did.
+  bool wait_for(int64_t ms);
+
+  /// No output and no progress for this long while not paused: the encoder
+  /// (or a decoder) stopped responding; the export is reported as failed.
+  static constexpr int64_t kStallSeconds = 60;
 
  private:
   struct Overlay;
@@ -117,8 +126,11 @@ class Exporter {
   std::chrono::steady_clock::time_point speed_mark_;
   int64_t speed_mark_frames_ = 0;
   double recent_fps_ = 0;
+  bool worker_ended_ = false;
+  std::atomic<int64_t> last_progress_ns_{0};  // steady clock, any frame or packet
 
-  std::thread worker_;
+  void progress();
+  bool stalled_locked() const;
 };
 
 const char* export_state_name(Exporter::State s);
