@@ -551,12 +551,14 @@ class _TimelineView extends StatelessWidget {
         TrackKind.video => CutlabColors.videoTrack,
         TrackKind.audio => CutlabColors.audioTrack,
         TrackKind.text => CutlabColors.textTrack,
+        TrackKind.image => CutlabColors.imageTrack,
       };
 
   IconData _icon(TrackKind k) => switch (k) {
         TrackKind.video => Icons.movie_outlined,
         TrackKind.audio => Icons.music_note_outlined,
         TrackKind.text => Icons.title,
+        TrackKind.image => Icons.image_outlined,
       };
 
   @override

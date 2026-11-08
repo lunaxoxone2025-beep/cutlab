@@ -150,6 +150,7 @@ void main() {
       },
     );
     final d = jsonDecode(codec.encode(sampleProject())) as Map<String, Object?>;
+    d['formatVersion'] = 1;
     final body = d['project'] as Map<String, Object?>;
     body['bookmarks'] = body.remove('markers');
     final p = v2.decode(jsonEncode(d));

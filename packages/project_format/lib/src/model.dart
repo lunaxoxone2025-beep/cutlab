@@ -9,7 +9,9 @@ import 'time.dart';
 
 enum MediaKind { video, audio, image }
 
-enum TrackKind { video, audio, text }
+/// Track types. Clips only go on tracks of their kind: video files on video
+/// tracks, photos on image tracks, sound on audio tracks, titles on text tracks.
+enum TrackKind { video, audio, text, image }
 
 enum Interpolation { hold, linear, easeIn, easeOut, easeInOut, bezier }
 
@@ -229,6 +231,8 @@ class Transition {
   static Transition fromReader(JsonReader r) => Transition(type: r.string('type'), durationTicks: r.integer('durationTicks', min: 1));
 }
 
+const Object _unset = Object();
+
 class Clip {
   final String id;
 
@@ -241,7 +245,17 @@ class Clip {
   final int sourceInTicks;
   final Rational speed;
   final bool reversed;
+
+  /// Linear gain: 1.0 = unchanged, 0 = silent, up to 2.0.
   final double volume;
+
+  /// Audio fade lengths at the clip edges (timeline ticks).
+  final int fadeInTicks;
+  final int fadeOutTicks;
+
+  /// Clips sharing a link id (a video and its detached audio) move, trim,
+  /// split and delete together.
+  final String? linkId;
   final List<Effect> effects;
   final Transition? transitionIn;
 
@@ -260,6 +274,9 @@ class Clip {
     this.speed = Rational.one,
     this.reversed = false,
     this.volume = 1.0,
+    this.fadeInTicks = 0,
+    this.fadeOutTicks = 0,
+    this.linkId,
     this.effects = const [],
     this.transitionIn,
     this.keyframes = const {},
@@ -268,8 +285,27 @@ class Clip {
 
   int get endTicks => startTicks + durationTicks;
 
-  Clip copyWith({int? startTicks, int? durationTicks, int? sourceInTicks, Rational? speed, double? volume, List<Effect>? effects}) => Clip(
-        id: id,
+  /// Source time consumed by the clip (duration × speed).
+  int get sourceDurationTicks => mulDiv(durationTicks, speed.num, speed.den);
+
+  /// Pass `linkId: null` to unlink; omit it to keep the current link.
+  Clip copyWith({
+    String? id,
+    int? startTicks,
+    int? durationTicks,
+    int? sourceInTicks,
+    Rational? speed,
+    double? volume,
+    int? fadeInTicks,
+    int? fadeOutTicks,
+    Object? linkId = _unset,
+    List<Effect>? effects,
+    Object? transitionIn = _unset,
+    Map<String, List<Keyframe>>? keyframes,
+    Map<String, Object?>? data,
+  }) =>
+      Clip(
+        id: id ?? this.id,
         mediaId: mediaId,
         startTicks: startTicks ?? this.startTicks,
         durationTicks: durationTicks ?? this.durationTicks,
@@ -277,10 +313,13 @@ class Clip {
         speed: speed ?? this.speed,
         reversed: reversed,
         volume: volume ?? this.volume,
+        fadeInTicks: fadeInTicks ?? this.fadeInTicks,
+        fadeOutTicks: fadeOutTicks ?? this.fadeOutTicks,
+        linkId: identical(linkId, _unset) ? this.linkId : linkId as String?,
         effects: effects ?? this.effects,
-        transitionIn: transitionIn,
-        keyframes: keyframes,
-        data: data,
+        transitionIn: identical(transitionIn, _unset) ? this.transitionIn : transitionIn as Transition?,
+        keyframes: keyframes ?? this.keyframes,
+        data: data ?? this.data,
       );
 
   Map<String, Object?> toJson() => {
@@ -292,6 +331,9 @@ class Clip {
         'speed': speed.toJson(),
         if (reversed) 'reversed': true,
         'volume': volume,
+        if (fadeInTicks > 0) 'fadeInTicks': fadeInTicks,
+        if (fadeOutTicks > 0) 'fadeOutTicks': fadeOutTicks,
+        if (linkId != null) 'linkId': linkId,
         'effects': [for (final e in effects) e.toJson()],
         if (transitionIn != null) 'transitionIn': transitionIn!.toJson(),
         if (keyframes.isNotEmpty)
@@ -320,6 +362,9 @@ class Clip {
       speed: speed,
       reversed: r.boolean('reversed', fallback: false),
       volume: r.number('volume', fallback: 1.0),
+      fadeInTicks: r.integer('fadeInTicks', fallback: 0, min: 0),
+      fadeOutTicks: r.integer('fadeOutTicks', fallback: 0, min: 0),
+      linkId: r.optString('linkId'),
       effects: r.list('effects', Effect.fromReader),
       transitionIn: r.has('transitionIn') ? Transition.fromReader(r.object('transitionIn')) : null,
       keyframes: keyframes,

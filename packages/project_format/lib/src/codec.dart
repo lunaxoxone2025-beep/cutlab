@@ -12,14 +12,17 @@ const String projectFormatId = 'cutlab-project';
 
 /// Current on-disk format version. Bump it together with a migration in
 /// [defaultMigrations] whenever the JSON layout changes incompatibly.
-const int currentFormatVersion = 1;
+const int currentFormatVersion = 2;
 
 /// Transforms the `project` object of version N into version N + 1.
 typedef Migration = Map<String, Object?> Function(Map<String, Object?> project);
 
 /// Migrations keyed by the version they upgrade *from*.
-/// Empty for now: version 1 is the first published layout.
-const Map<int, Migration> defaultMigrations = {};
+const Map<int, Migration> defaultMigrations = {1: _v1ToV2};
+
+/// v2 added image tracks and optional clip fields (fades, links). Every v1
+/// file is already valid v2, so nothing needs rewriting.
+Map<String, Object?> _v1ToV2(Map<String, Object?> project) => project;
 
 class ProjectCodec {
   final Map<int, Migration> migrations;
@@ -113,6 +116,15 @@ List<ValidationIssue> validateProject(Project p) {
       if (!clipIds.add(clip.id)) issues.add(ValidationIssue('$cp.id', 'duplicate clip id "${clip.id}"'));
       if (clip.mediaId != null && !mediaIds.contains(clip.mediaId)) {
         issues.add(ValidationIssue('$cp.mediaId', 'unknown media "${clip.mediaId}"'));
+      } else if (clip.mediaId != null) {
+        final kind = p.media.firstWhere((m) => m.id == clip.mediaId).kind;
+        final ok = switch (track.kind) {
+          TrackKind.video => kind == MediaKind.video || kind == MediaKind.image,
+          TrackKind.image => kind == MediaKind.image,
+          TrackKind.audio => kind == MediaKind.audio || kind == MediaKind.video,
+          TrackKind.text => false,
+        };
+        if (!ok) issues.add(ValidationIssue('$cp.mediaId', '${kind.name} media on a ${track.kind.name} track'));
       }
       if (c > 0 && clip.startTicks < track.clips[c - 1].endTicks) {
         issues.add(ValidationIssue('$cp.startTicks', 'overlaps clip "${track.clips[c - 1].id}" on the same track'));

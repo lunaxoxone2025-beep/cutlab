@@ -14,6 +14,7 @@ abstract final class CutlabColors {
   static const videoTrack = Color(0xFF3A3A48);
   static const audioTrack = Color(0xFF1D5FB8);
   static const textTrack = Color(0xFF8F5CFF);
+  static const imageTrack = Color(0xFFE0A030);
   static const danger = Color(0xFFFF4D6A);
 }
 
