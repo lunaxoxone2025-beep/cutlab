@@ -101,7 +101,7 @@ class TimelinePlayback extends ChangeNotifier {
     r.play();
     _playing = true;
     controller.engine.note('timeline play from ${state.playhead}');
-    _wake(const Duration(days: 1));
+    _wake();
     notifyListeners();
   }
 
@@ -235,6 +235,9 @@ class TimelinePlayback extends ChangeNotifier {
     _lastPushed = state.playhead;
   }
 
+  /// Keeps polling for [d] more (pictures arrive a moment after a seek).
+  /// While playing the ticker always runs; the latest call decides when an
+  /// idle ticker stops.
   void _wake([Duration d = const Duration(milliseconds: 1500)]) {
     if (_disposed) return;
     if (!_ticker.isActive) {
@@ -243,8 +246,7 @@ class TimelinePlayback extends ChangeNotifier {
       _awakeUntil = d;
       _ticker.start();
     } else {
-      final until = _lastTick + d;
-      if (until > _awakeUntil) _awakeUntil = until;
+      _awakeUntil = _lastTick + d;
     }
   }
 

@@ -114,13 +114,19 @@ class _Transport extends StatelessWidget {
             onPressed: can ? playback.toggle : null,
           ),
           const SizedBox(width: CutlabSpacing.sm),
-          Text(
-            '${formatTimecode(state.playhead, project.fps)} / ${formatTimecode(project.durationTicks, project.fps)}',
-            style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
+          Flexible(
+            flex: 3,
+            child: Text(
+              '${formatTimecode(state.playhead, project.fps)} / ${formatTimecode(project.durationTicks, project.fps)}',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
+            ),
           ),
           const Spacer(),
           if (playback.available && st.framesShown > 0)
             Flexible(
+              flex: 2,
               child: InkWell(
                 key: const Key('syncInfo'),
                 onTap: () => showSyncDiagnostics(context, playback),
@@ -140,7 +146,7 @@ class _Transport extends StatelessWidget {
                 ),
               ),
             ),
-          SizedBox(width: 56, height: 8, child: LevelMeter(level: playback.masterLevel, key: const Key('masterMeter'))),
+          SizedBox(width: 40, height: 8, child: LevelMeter(level: playback.masterLevel, key: const Key('masterMeter'))),
           const SizedBox(width: CutlabSpacing.sm),
         ],
       ),

@@ -256,6 +256,18 @@ std::vector<Shown> collect(cutlab_timeline* t, int ms) {
   return out;
 }
 
+// Plays until the end (or `max_ms`): real-time tests must not depend on how
+// quickly a CI machine's (null) audio device starts.
+std::vector<Shown> play_to_end(cutlab_timeline* t, int max_ms) {
+  std::vector<Shown> all;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(max_ms);
+  do {
+    auto part = collect(t, 100);
+    all.insert(all.end(), part.begin(), part.end());
+  } while (cutlab_timeline_playing(t) && std::chrono::steady_clock::now() < end);
+  return all;
+}
+
 Shown frame_after_seek(cutlab_timeline* t, int64_t at) {
   cutlab_timeline_seek(t, at, 1);
   for (int i = 0; i < 200; ++i) {
@@ -273,7 +285,7 @@ void test_playback_two_clips() {
       open_tl(Plan().track("v1", "video").clip("a", "gray60.mp4", 0, SEC, 0).clip("b", "gray60.mp4", SEC, SEC, 5 * SEC));
   CHECK(cutlab_timeline_duration(t) == 2 * SEC);
   cutlab_timeline_play(t);
-  auto shown = collect(t, 2600);
+  auto shown = play_to_end(t, 8000);
   CHECK(cutlab_timeline_playing(t) == 0);       // stopped at the end
   CHECK(cutlab_timeline_position(t) == 2 * SEC);
   int bad = 0, in_a = 0, in_b = 0;
@@ -325,7 +337,7 @@ void test_gaps_overlaps_hidden_images() {
   // Continuous playback across all of it.
   cutlab_timeline_seek(t, 0, 1);
   cutlab_timeline_play(t);
-  auto shown = collect(t, 3300);
+  auto shown = play_to_end(t, 10000);
   bool saw_top = false, saw_black = false, saw_photo = false;
   for (const auto& s : shown) {
     if (s.pts >= 260 * MS && s.pts < 490 * MS && std::abs(s.gray - expected_gray(8 * SEC + (s.pts - 250 * MS) + TPS / 120)) <= 3) saw_top = true;
@@ -389,7 +401,7 @@ void test_long_recording_playback() {
   CHECK_NEAR(s.gray, static_cast<int>((7190LL * 30) % 256), 4);
   cutlab_timeline_seek(t, 7199 * SEC, 1);
   cutlab_timeline_play(t);
-  auto shown = collect(t, 1500);
+  auto shown = play_to_end(t, 6000);
   CHECK(!shown.empty());
   CHECK(cutlab_timeline_playing(t) == 0);  // reached the end (2:00:00)
   CHECK(cutlab_timeline_position(t) == 7200 * SEC);
