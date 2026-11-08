@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cutlab_project_format/cutlab_project_format.dart' hide Clip;
 import 'package:flutter/material.dart';
