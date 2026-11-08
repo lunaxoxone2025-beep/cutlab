@@ -73,6 +73,13 @@ abstract class MediaPlatform {
 
   /// Lets the user choose where to write [text]; false when cancelled.
   Future<bool> saveProjectFile(String suggestedName, String text);
+
+  /// Something the native media engine can open for [uri]: the path itself
+  /// on PC, or "fd:<n>" (an open file descriptor) for Android content URIs.
+  Future<String> openForEngine(String uri);
+
+  /// Releases what [openForEngine] returned.
+  Future<void> closeForEngine(String engineUri);
 }
 
 const videoExtensions = {'mp4', 'mov', 'mkv', 'webm', 'm4v', '3gp', 'avi', 'ts', 'mts', 'm2ts', 'flv', 'wmv'};

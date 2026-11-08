@@ -12,6 +12,7 @@ on:
       - 'apps/cutlab/**'
       - 'packages/**'
       - 'core/**'
+      - 'scripts/**'
       - 'android-signing/**'
       - '.github/workflows/flutter-build.yml'
   workflow_dispatch:
@@ -24,39 +25,74 @@ env:
   FLUTTER_VERSION: '3.24.5'
   # Distinct from CutLab Lite (com.lunaxoxone.cutlab) so both can be installed side by side.
   FLUTTER_ORG: com.lunaxoxone.studio
-  BUILD_NAME: 0.2.${{ github.run_number }}
+  BUILD_NAME: 0.3.${{ github.run_number }}
 
 jobs:
   android:
-    name: Android APK
+    name: Android APK (arm64, with media engine)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/cutlab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+      - name: Locate NDK
+        id: ndk
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          VER=$(grep -m1 Pkg.Revision "$NDK/source.properties" | cut -d= -f2 | tr -d ' ')
+          echo "home=$NDK" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "NDK $VER at $NDK"
+      - id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-android
+          key: ffmpeg-android-arm64-${{ steps.ndk.outputs.version }}-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
+      - name: Build FFmpeg for Android (static, LGPL, MediaCodec)
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.home }}
+        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh android-arm64 build/ffmpeg-android
+      - name: Build media engine (libcutlab_core.so)
+        run: |
+          NDK="${{ steps.ndk.outputs.home }}"
+          cmake -S core -B build/core-android -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static \
+            -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-android -DCUTLAB_BUILD_TESTS=OFF
+          cmake --build build/core-android -j 4
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded build/core-android/libcutlab_core.so
+          ls -la build/core-android/libcutlab_core.so
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Generate platform folder + native overlay
+      - name: Generate platform folder + native overlay + engine
+        working-directory: apps/cutlab
         run: |
           flutter create --platforms=android --org "$FLUTTER_ORG" --project-name cutlab .
           cp -R platform_overlay/android/. android/
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp "$GITHUB_WORKSPACE/build/core-android/libcutlab_core.so" android/app/src/main/jniLibs/arm64-v8a/
+          # The engine targets Android 7.0+ (API 24).
+          sed -i -E 's/minSdk(Version)? *=? *flutter\.minSdkVersion/minSdk = 24/' android/app/build.gradle
+          grep -n "minSdk" android/app/build.gradle
       - name: Use the fixed signing key (updates install over older builds)
         run: |
           mkdir -p ~/.android
           cp "$GITHUB_WORKSPACE/android-signing/cutlab.keystore" ~/.android/debug.keystore
-      - run: flutter pub get
       - name: Build APK
-        run: flutter build apk --release --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
-      - name: Rename
-        run: cp build/app/outputs/flutter-apk/app-release.apk CUTLAB.apk
+        working-directory: apps/cutlab
+        run: |
+          flutter pub get
+          flutter build apk --release --target-platform android-arm64 --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
+          cp build/app/outputs/flutter-apk/app-release.apk CUTLAB.apk
+      - name: Check the engine is inside the APK
+        working-directory: apps/cutlab
+        run: unzip -l CUTLAB.apk | grep -E "lib/arm64-v8a/(libcutlab_core|libapp|libflutter)\.so"; unzip -l CUTLAB.apk | grep -q "lib/arm64-v8a/libcutlab_core.so"
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-android
@@ -64,26 +100,44 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows
+    name: Windows x64 (with media engine)
     # Pinned: Flutter 3.24 detects Visual Studio 2019/2022 only, and newer
     # windows-latest images ship a later Visual Studio.
     runs-on: windows-2022
-    defaults:
-      run:
-        working-directory: apps/cutlab
     steps:
       - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Fetch FFmpeg (LGPL, shared)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ffmpeg/fetch_ffmpeg_windows.ps1 -Dest build/ffmpeg-win64
+      - name: Build media engine (cutlab_core.dll)
+        run: |
+          cmake -S core -B build/core -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_SHARED=ON -DCUTLAB_FFMPEG_ROOT=${{ github.workspace }}/build/ffmpeg-win64 -DCUTLAB_BUILD_TESTS=OFF
+          cmake --build build/core --config Release
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter create --platforms=windows --org "${{ env.FLUTTER_ORG }}" --project-name cutlab .
-      - run: flutter pub get
-      - run: flutter build windows --release --build-name "${{ env.BUILD_NAME }}" --build-number "${{ github.run_number }}"
-      - name: Package
+      - name: Build app
+        working-directory: apps/cutlab
+        run: |
+          flutter create --platforms=windows --org "${{ env.FLUTTER_ORG }}" --project-name cutlab .
+          flutter pub get
+          flutter build windows --release --build-name "${{ env.BUILD_NAME }}" --build-number "${{ github.run_number }}"
+      - name: Add the engine and FFmpeg DLLs, then package
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath CUTLAB-windows-x64.zip
+        working-directory: apps/cutlab
+        run: |
+          $out = "build/windows/x64/runner/Release"
+          Copy-Item "${{ github.workspace }}/build/core/Release/cutlab_core.dll" $out
+          Get-ChildItem "${{ github.workspace }}/build/ffmpeg-win64/bin" -Filter *.dll | Copy-Item -Destination $out
+          Get-ChildItem $out -Filter *.dll | ForEach-Object { Write-Host $_.Name }
+          Compress-Archive -Path "$out/*" -DestinationPath CUTLAB-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-windows-x64
@@ -91,25 +145,37 @@ jobs:
           if-no-files-found: error
 
   linux:
-    name: Linux
+    name: Linux x64 (with media engine)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/cutlab
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev nasm zlib1g-dev
+      - id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-linux
+          key: ffmpeg-linux-x64-${{ hashFiles('scripts/ffmpeg/build_ffmpeg.sh') }}
+      - name: Build FFmpeg (static, LGPL)
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: WORK=$PWD/build/ffwork scripts/ffmpeg/build_ffmpeg.sh linux-x64 build/ffmpeg-linux
+      - name: Build media engine
+        run: |
+          cmake -S core -B build/core -DCMAKE_BUILD_TYPE=Release -DCUTLAB_WITH_MEDIA=ON -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux -DCUTLAB_BUILD_TESTS=OFF
+          cmake --build build/core -j 4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter create --platforms=linux --org "$FLUTTER_ORG" --project-name cutlab .
-      - run: flutter pub get
-      - run: flutter build linux --release --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
-      - name: Package
-        run: tar -C build/linux/x64/release/bundle -czf CUTLAB-linux-x64.tar.gz .
+      - name: Build app
+        working-directory: apps/cutlab
+        run: |
+          flutter create --platforms=linux --org "$FLUTTER_ORG" --project-name cutlab .
+          flutter pub get
+          flutter build linux --release --build-name "$BUILD_NAME" --build-number "${{ github.run_number }}"
+          cp "$GITHUB_WORKSPACE/build/core/libcutlab_core.so" build/linux/x64/release/bundle/lib/
+          tar -C build/linux/x64/release/bundle -czf CUTLAB-linux-x64.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-linux-x64

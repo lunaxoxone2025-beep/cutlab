@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cutlab_project_format/cutlab_project_format.dart';
 import 'package:flutter/foundation.dart';
 
+import '../engine/bmp.dart';
+import '../engine/media_engine.dart';
 import '../media/media_platform.dart';
 import '../storage/project_store.dart';
 
@@ -16,17 +18,20 @@ class EditorController extends ChangeNotifier {
     required Project project,
     required this.store,
     required this.media,
+    MediaEngine? engine,
     Duration autosaveDelay = const Duration(seconds: 10),
     this.historyLimit = 200,
     DateTime Function()? clock,
     bool startDirty = false,
-  })  : _project = project,
+  })  : engine = engine ?? UnavailableMediaEngine(),
+        _project = project,
         _autosaveDelay = autosaveDelay,
         _clock = clock ?? DateTime.now,
         _state = startDirty ? SaveState.unsaved : SaveState.saved;
 
   final ProjectStore store;
   final MediaPlatform media;
+  final MediaEngine engine;
   final int historyLimit;
   final Duration _autosaveDelay;
   final DateTime Function() _clock;
@@ -43,6 +48,9 @@ class EditorController extends ChangeNotifier {
   final Map<String, bool> _available = {};
   final Map<String, Uint8List?> _thumbs = {};
   final Set<String> _thumbsLoading = {};
+  final Map<String, ProbeInfo> _probes = {};
+  final Map<String, String> _probeErrors = {};
+  final Set<String> _probing = {};
 
   Project get project => _project;
   SaveState get saveState => _state;
@@ -152,6 +160,7 @@ class EditorController extends ChangeNotifier {
       _available[m.id] = true;
     }
     _notify();
+    unawaited(probeMedia([for (final m in fresh) m.id]));
     return fresh.length;
   }
 
@@ -182,7 +191,9 @@ class EditorController extends ChangeNotifier {
     edit((p) => p.copyWith(media: [for (final m in p.media) m.id == mediaId ? relinked : m]));
     _available[mediaId] = true;
     _thumbs.remove(mediaId);
+    _probes.remove(mediaId);
     _notify();
+    unawaited(probeMedia([mediaId]));
     return null;
   }
 
@@ -206,13 +217,63 @@ class EditorController extends ChangeNotifier {
       _available[m.id] = ok;
     }
     _notify();
+    await probeMedia([for (final m in _project.media) if (_available[m.id] == true) m.id]);
+  }
+
+  // ---------------------------------------------------------- media engine
+
+  /// Engine details for [mediaId] (codec, frame rate…), once probed.
+  ProbeInfo? probeInfo(String mediaId) => _probes[mediaId];
+
+  /// Why the engine could not read [mediaId], if it failed.
+  String? probeError(String mediaId) => _probeErrors[mediaId];
+
+  bool isProbing(String mediaId) => _probing.contains(mediaId);
+
+  /// Reads duration, size, frame rate and codecs with the media engine and
+  /// stores them in the project. This is measurement, not an edit: it does not
+  /// create undo steps (but the project is saved with the new values).
+  Future<void> probeMedia(List<String> ids) async {
+    if (!engine.available) return;
+    for (final id in ids) {
+      if (_disposed) return;
+      final m = _project.media.where((x) => x.id == id).firstOrNull;
+      if (m == null || _probing.contains(id) || _probes.containsKey(id)) continue;
+      _probing.add(id);
+      _notify();
+      String? engineUri;
+      try {
+        engineUri = await media.openForEngine(m.uri);
+        final info = await engine.probe(engineUri);
+        if (_disposed) return;
+        _probes[id] = info;
+        _probeErrors.remove(id);
+        _updateMediaSilently(id, info.applyTo);
+      } on Object catch (e) {
+        _probeErrors[id] = e.toString();
+      } finally {
+        if (engineUri != null) unawaited(media.closeForEngine(engineUri).catchError((Object _) {}));
+        _probing.remove(id);
+        _notify();
+      }
+    }
+  }
+
+  void _updateMediaSilently(String id, MediaRef Function(MediaRef) update) {
+    final before = _project.media.where((m) => m.id == id).firstOrNull;
+    if (before == null) return;
+    final after = update(before);
+    if (after.toJson().toString() == before.toJson().toString()) return;
+    _project = _project.copyWith(media: [for (final m in _project.media) m.id == id ? after : m]);
+    _state = SaveState.unsaved;
+    _scheduleAutosave();
   }
 
   /// Cached thumbnail; starts loading it on first request.
   Uint8List? thumbnailFor(MediaRef m) {
     if (_thumbs.containsKey(m.id)) return _thumbs[m.id];
     if (_thumbsLoading.add(m.id)) {
-      unawaited(media.thumbnail(m.uri, m.kind).then((bytes) {
+      unawaited(_loadThumbnail(m).then((bytes) {
         _thumbs[m.id] = bytes;
       }, onError: (Object _) {
         _thumbs[m.id] = null;
@@ -239,6 +300,25 @@ class EditorController extends ChangeNotifier {
         }
         dispose();
       }();
+
+  Future<Uint8List?> _loadThumbnail(MediaRef m) async {
+    if (m.kind == MediaKind.audio) return null;
+    if (engine.available) {
+      String? engineUri;
+      try {
+        engineUri = await media.openForEngine(m.uri);
+        // A frame a little into the clip (not the usual black first frame).
+        final at = m.durationTicks > 0 ? (m.durationTicks ~/ 10).clamp(0, 3 * ticksPerSecond) : 0;
+        final img = await engine.frameAt(engineUri, at, accurate: false, maxWidth: 192, maxHeight: 108);
+        return encodeBmp(img);
+      } on Object {
+        // fall through to the platform thumbnailer
+      } finally {
+        if (engineUri != null) unawaited(media.closeForEngine(engineUri).catchError((Object _) {}));
+      }
+    }
+    return media.thumbnail(m.uri, m.kind);
+  }
 
   void _notify() {
     if (!_disposed) notifyListeners();

@@ -101,6 +101,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       project: project,
       store: _store,
       media: widget.services.media,
+      engine: widget.services.engine,
       autosaveDelay: Duration(seconds: widget.services.settings.value.autosaveSeconds),
       startDirty: recovered,
     );
@@ -108,7 +109,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       controller.dispose();
       return;
     }
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => WorkspaceScreen(controller: controller)));
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => WorkspaceScreen(controller: controller, settings: widget.services.settings)));
     await controller.close();
     await _refresh();
   }

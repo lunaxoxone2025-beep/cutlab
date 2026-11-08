@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'engine/ffi_media_engine.dart';
+import 'engine/media_engine.dart';
 import 'media/android_media_platform.dart';
 import 'media/desktop_media_platform.dart';
 import 'media/media_platform.dart';
@@ -10,17 +12,24 @@ import 'storage/app_settings.dart';
 import 'storage/project_store.dart';
 import 'storage/store_backend.dart';
 
-const appVersion = '0.2.0';
+const appVersion = '0.3.0';
 
 /// Everything the UI needs from the outside world. Tests build it with
 /// in-memory storage and a fake media platform.
 class AppServices {
-  AppServices({required this.projects, required this.settingsStore, required this.media, AppSettings settings = const AppSettings()})
-      : settings = ValueNotifier(settings);
+  AppServices({
+    required this.projects,
+    required this.settingsStore,
+    required this.media,
+    MediaEngine? engine,
+    AppSettings settings = const AppSettings(),
+  })  : engine = engine ?? UnavailableMediaEngine(),
+        settings = ValueNotifier(settings);
 
   final ProjectStore projects;
   final SettingsStore settingsStore;
   final MediaPlatform media;
+  final MediaEngine engine;
   final ValueNotifier<AppSettings> settings;
 
   /// Real services: projects in the documents folder (visible on PC),
@@ -35,6 +44,7 @@ class AppServices {
       projects: ProjectStore(FileBackend(library)),
       settingsStore: settingsStore,
       media: Platform.isAndroid ? AndroidMediaPlatform() : DesktopMediaPlatform(),
+      engine: FfiMediaEngine.load(),
       settings: await settingsStore.load(),
     );
   }

@@ -15,18 +15,20 @@ const desktop = Size(1400, 900);
 const phone = Size(400, 860);
 
 class Harness {
-  Harness()
+  Harness({this.engine})
       : backend = MemoryBackend(),
         media = FakeMediaPlatform() {
     services = AppServices(
       projects: ProjectStore(backend),
       settingsStore: SettingsStore(MemoryBackend()),
       media: media,
+      engine: engine,
     );
   }
 
   final MemoryBackend backend;
   final FakeMediaPlatform media;
+  final FakeMediaEngine? engine;
   late final AppServices services;
 
   ProjectStore get store => services.projects;
@@ -202,6 +204,69 @@ void main() {
 
     final p = await h.store.create(name: 'x', mode: h.services.settings.value.defaultMode);
     expect(p.editorMode, EditorMode.advanced);
+  });
+
+  testWidgets('selecting media opens the viewer: play, scrub, frame step', (tester) async {
+    final engine = FakeMediaEngine();
+    final h = Harness(engine: engine);
+    final p = await h.store.create(name: 'Viewer');
+    await h.store.save(p.copyWith(media: [video('ranked.mp4', uri: '/v/ranked.mp4').toMediaRef('m1')]));
+    engine.probes['/v/ranked.mp4'] = videoProbe(seconds: 90);
+
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Viewer'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Tap a file in Media'), findsOneWidget);
+    expect(find.textContaining('H264 · 60 fps'), findsOneWidget, reason: 'probe summary in the media list');
+
+    await tester.tap(find.text('ranked.mp4'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(engine.players, hasLength(1));
+    final player = engine.players.single;
+    expect(player.hardware, isTrue);
+    expect(find.byKey(const Key('scrubber')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('playPause')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.playing, isTrue);
+    await tester.tap(find.byKey(const Key('playPause')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.playing, isFalse);
+
+    await tester.tap(find.byKey(const Key('stepForward')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.seeks.last, (framesToTicks(1, Rational.fps60), true));
+
+    // Dragging scrubs with fast seeks and finishes with an accurate one.
+    await tester.drag(find.byKey(const Key('scrubber')), const Offset(200, 0));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.seeks.any((s) => !s.$2), isTrue);
+    expect(player.seeks.last.$2, isTrue);
+
+    await tester.pump(const Duration(seconds: 2)); // let the viewer go idle
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(player.disposed, isTrue);
+  });
+
+  testWidgets('settings: preview quality and hardware decoding reach the player', (tester) async {
+    final engine = FakeMediaEngine();
+    final h = Harness(engine: engine);
+    await h.pump(tester, phone);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('FFmpeg fake'));
+    expect(find.textContaining('FFmpeg fake'), findsOneWidget);
+    await tester.ensureVisible(find.text('540p'));
+    await tester.tap(find.text('540p'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('hardwareDecoding')));
+    await tester.tap(find.byKey(const Key('hardwareDecoding')));
+    await tester.pumpAndSettle();
+    expect(h.services.settings.value.previewHeight, 540);
+    expect(h.services.settings.value.hardwareDecoding, isFalse);
+    expect((await h.services.settingsStore.load()).previewHeight, 540);
   });
 
   test('formatting helpers', () {

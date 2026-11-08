@@ -1,12 +1,12 @@
 # Downloads a prebuilt LGPL, shared FFmpeg for Windows x64 (BtbN/FFmpeg-Builds)
 # and makes sure MSVC import libraries (.lib) exist.
 #
-#   pwsh scripts/ffmpeg/fetch_ffmpeg_windows.ps1 -Dest build/ffmpeg-win64 [-Series n7.1]
+#   pwsh scripts/ffmpeg/fetch_ffmpeg_windows.ps1 -Dest build/ffmpeg-win64 [-Series n8.1]
 #
 # Needs the GitHub CLI (gh) with a token (GH_TOKEN) to list release assets.
 param(
   [Parameter(Mandatory = $true)][string]$Dest,
-  [string]$Series = "n7.1"
+  [string]$Series = "n8.1"
 )
 $ErrorActionPreference = "Stop"
 

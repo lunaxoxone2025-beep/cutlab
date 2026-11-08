@@ -89,4 +89,10 @@ class DesktopMediaPlatform implements MediaPlatform {
     await File(target).writeAsString(text, flush: true);
     return true;
   }
+
+  @override
+  Future<String> openForEngine(String uri) async => uri;
+
+  @override
+  Future<void> closeForEngine(String engineUri) async {}
 }

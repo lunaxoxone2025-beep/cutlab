@@ -25,6 +25,18 @@ import java.util.concurrent.Executors
  * persistable content:// URI, so large recordings are never copied.
  */
 class MainActivity : FlutterActivity() {
+    companion object {
+        /** True when the native media engine (FFmpeg) is packaged and loaded. */
+        val engineLoaded: Boolean = try {
+            // Loading through Java runs JNI_OnLoad, which hands the Java VM to
+            // FFmpeg for MediaCodec hardware decoding. Dart then opens the same library.
+            System.loadLibrary("cutlab_core")
+            true
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
     private val io = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
     private val pending = HashMap<Int, (Intent?) -> Unit>()
@@ -32,6 +44,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        engineLoaded // force the companion initializer before Dart touches the engine
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "cutlab/media").setMethodCallHandler { call, result ->
             try {
                 handle(call, result)
@@ -110,6 +123,21 @@ class MainActivity : FlutterActivity() {
                         false
                     }
                 }
+            }
+            "openFd" -> {
+                // A descriptor the native engine reads directly (no copy). The
+                // engine duplicates it; Dart closes this one with "closeFd".
+                val uri = Uri.parse(call.argument<String>("uri")!!)
+                background(result) {
+                    contentResolver.openFileDescriptor(uri, "r")?.detachFd() ?: throw IllegalStateException("cannot open $uri")
+                }
+            }
+            "closeFd" -> {
+                val fd = call.argument<Int>("fd") ?: -1
+                if (fd >= 0) {
+                    try { android.os.ParcelFileDescriptor.adoptFd(fd).close() } catch (e: Exception) { }
+                }
+                result.success(null)
             }
             "thumbnail" -> {
                 val uri = Uri.parse(call.argument<String>("uri")!!)

@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 import '../editor/editor_controller.dart';
 import '../format.dart';
 import '../theme.dart';
+import '../storage/app_settings.dart';
 import 'dialogs.dart';
 import 'project_settings_form.dart';
+import 'source_viewer.dart';
 
 /// Width at which the desktop workspace (side panels) replaces the
 /// touch-first mobile layout.
@@ -16,9 +18,10 @@ const double kDesktopBreakpoint = 1000;
 
 /// The editing workspace for one project.
 class WorkspaceScreen extends StatefulWidget {
-  const WorkspaceScreen({super.key, required this.controller});
+  const WorkspaceScreen({super.key, required this.controller, required this.settings});
 
   final EditorController controller;
+  final ValueListenable<AppSettings> settings;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -26,8 +29,13 @@ class WorkspaceScreen extends StatefulWidget {
 
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   late final AppLifecycleListener _lifecycle;
+  String? _selectedMediaId;
 
   EditorController get c => widget.controller;
+
+  MediaRef? get _selected => c.project.media.where((m) => m.id == _selectedMediaId).firstOrNull;
+
+  void _select(MediaRef m) => setState(() => _selectedMediaId = m.id);
 
   @override
   void initState() {
@@ -118,7 +126,24 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     );
   }
 
-  Widget _mediaPanel() => _MediaPanel(controller: c, onImport: _import, onRelink: _relink, onRemove: _remove);
+  Widget _mediaPanel() => _MediaPanel(
+        controller: c,
+        selectedId: _selectedMediaId,
+        onSelect: _select,
+        onImport: _import,
+        onRelink: _relink,
+        onRemove: _remove,
+      );
+
+  Widget _preview() => ValueListenableBuilder<AppSettings>(
+        valueListenable: widget.settings,
+        builder: (context, settings, _) => _PreviewPanel(
+          controller: c,
+          media: _selected,
+          available: _selected == null ? null : c.isAvailable(_selected!.id),
+          settings: settings,
+        ),
+      );
 
   Widget _desktop() {
     return Padding(
@@ -132,7 +157,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               children: [
                 SizedBox(width: 300, child: _Panel(title: 'Media (${c.project.media.length})', child: _mediaPanel())),
                 const SizedBox(width: CutlabSpacing.sm),
-                Expanded(child: _PreviewPanel(settings: c.project.settings)),
+                Expanded(child: _preview()),
                 const SizedBox(width: CutlabSpacing.sm),
                 SizedBox(width: 320, child: _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))),
               ],
@@ -154,7 +179,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             flex: 4,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(CutlabSpacing.sm, CutlabSpacing.sm, CutlabSpacing.sm, 0),
-              child: _PreviewPanel(settings: c.project.settings),
+              child: _preview(),
             ),
           ),
           TabBar(
@@ -258,44 +283,54 @@ class _Panel extends StatelessWidget {
 }
 
 class _PreviewPanel extends StatelessWidget {
-  const _PreviewPanel({required this.settings});
-  final ProjectSettings settings;
+  const _PreviewPanel({required this.controller, required this.media, required this.available, required this.settings});
+  final EditorController controller;
+  final MediaRef? media;
+  final bool? available;
+  final AppSettings settings;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(CutlabSpacing.md),
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: settings.width / settings.height,
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: Colors.black),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(CutlabSpacing.sm),
-                  child: Text(
-                    '${settings.width} × ${settings.height} · ${formatFps(settings.frameRate)} fps\nPlayback engine — Phase 3',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    final m = media;
+    final engine = controller.engine;
+    Widget body;
+    if (m == null) {
+      final s = controller.project.settings;
+      body = _note('${s.width} × ${s.height} · ${formatFps(s.frameRate)} fps\n'
+          '${engine.available ? 'Tap a file in Media to preview it.' : engine.info.reason ?? 'Media engine unavailable.'}');
+    } else if (available == false) {
+      body = _note('"${m.displayName}" is missing. Relink it to preview.');
+    } else if (!engine.available) {
+      body = _note(engine.info.reason ?? 'Media engine unavailable.');
+    } else {
+      body = SourceViewer(key: ValueKey(m.id), controller: controller, media: m, settings: settings);
+    }
+    return Card(clipBehavior: Clip.antiAlias, child: body);
   }
+
+  Widget _note(String text) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(CutlabSpacing.md),
+          child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),
+        ),
+      );
 }
 
 // ------------------------------------------------------------------ media
 
 class _MediaPanel extends StatelessWidget {
-  const _MediaPanel({required this.controller, required this.onImport, required this.onRelink, required this.onRemove});
+  const _MediaPanel({
+    required this.controller,
+    required this.selectedId,
+    required this.onSelect,
+    required this.onImport,
+    required this.onRelink,
+    required this.onRemove,
+  });
 
   final EditorController controller;
+  final String? selectedId;
+  final ValueChanged<MediaRef> onSelect;
   final VoidCallback onImport;
   final ValueChanged<MediaRef> onRelink;
   final ValueChanged<MediaRef> onRemove;
@@ -344,6 +379,11 @@ class _MediaPanel extends StatelessWidget {
             media: m,
             thumbnail: controller.thumbnailFor(m),
             available: controller.isAvailable(m.id),
+            info: controller.probeInfo(m.id),
+            probing: controller.isProbing(m.id),
+            probeError: controller.probeError(m.id),
+            selected: m.id == selectedId,
+            onSelect: () => onSelect(m),
             onRelink: () => onRelink(m),
             onRemove: () => onRemove(m),
           ),
@@ -376,9 +416,23 @@ class _MediaTile extends StatelessWidget {
       if (media.width != null && media.height != null) '${media.width}×${media.height}',
       if (media.sizeBytes != null) formatBytes(media.sizeBytes!),
     ];
+    final details = missing
+        ? 'Missing'
+        : [
+            parts.isEmpty ? media.kind.name : parts.join(' · '),
+            if (info != null && info!.summary.isNotEmpty) info!.summary,
+            if (probing) 'reading…',
+            if (probeError != null && info == null) 'unreadable',
+          ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: CutlabSpacing.sm),
-      child: Row(
+      child: Material(
+        color: selected ? CutlabColors.accent.withAlpha(30) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onSelect,
+          child: Row(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
@@ -398,7 +452,9 @@ class _MediaTile extends StatelessWidget {
               children: [
                 Text(media.displayName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
                 Text(
-                  missing ? 'Missing' : (parts.isEmpty ? media.kind.name : parts.join(' · ')),
+                  details,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, color: missing ? CutlabColors.danger : CutlabColors.textMuted),
                 ),
               ],
@@ -413,6 +469,8 @@ class _MediaTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
+        ),
       ),
     );
   }

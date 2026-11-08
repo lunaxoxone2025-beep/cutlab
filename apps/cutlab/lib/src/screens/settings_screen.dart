@@ -51,6 +51,45 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: CutlabSpacing.xl),
+            const Text('Preview quality', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: CutlabSpacing.xs),
+            const Text(
+              'Lower is smoother on mid-range phones and long 60/120 fps recordings. Export quality is not affected.',
+              style: TextStyle(color: CutlabColors.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: CutlabSpacing.sm),
+            Wrap(
+              spacing: CutlabSpacing.sm,
+              children: [
+                for (final h in AppSettings.previewChoices)
+                  ChoiceChip(
+                    label: Text('${h}p'),
+                    selected: s.previewHeight == h,
+                    onSelected: (_) => services.updateSettings(services.settings.value.copyWith(previewHeight: h)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: CutlabSpacing.lg),
+            SwitchListTile(
+              key: const Key('hardwareDecoding'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Hardware video decoding'),
+              subtitle: const Text('Uses the phone or PC video decoder when available; falls back to software automatically.',
+                  style: TextStyle(fontSize: 12)),
+              value: s.hardwareDecoding,
+              onChanged: (v) => services.updateSettings(services.settings.value.copyWith(hardwareDecoding: v)),
+            ),
+            const SizedBox(height: CutlabSpacing.lg),
+            const Text('Media engine', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: CutlabSpacing.xs),
+            Text(
+              services.engine.available
+                  ? 'FFmpeg ${services.engine.info.ffmpegVersion ?? '?'} · hardware: '
+                      '${services.engine.info.hardwareDecoders.isEmpty ? 'none' : services.engine.info.hardwareDecoders.join(', ')}'
+                  : services.engine.info.reason ?? 'Not available',
+              style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: CutlabSpacing.xl),
             const Text('Project folder', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: CutlabSpacing.xs),
             SelectableText(services.projects.location, style: const TextStyle(color: CutlabColors.textMuted, fontSize: 12)),

@@ -40,6 +40,20 @@ class AndroidMediaPlatform implements MediaPlatform {
   Future<bool> saveProjectFile(String suggestedName, String text) async =>
       await _channel.invokeMethod<bool>('saveDocument', {'name': suggestedName, 'text': text}) ?? false;
 
+  @override
+  Future<String> openForEngine(String uri) async {
+    if (!uri.startsWith('content://')) return uri;
+    final fd = await _channel.invokeMethod<int>('openFd', {'uri': uri});
+    if (fd == null || fd < 0) throw Exception('cannot open $uri');
+    return 'fd:$fd';
+  }
+
+  @override
+  Future<void> closeForEngine(String engineUri) async {
+    if (!engineUri.startsWith('fd:')) return;
+    await _channel.invokeMethod<void>('closeFd', {'fd': int.parse(engineUri.substring(3))});
+  }
+
   /// Converts one map from the channel into a [PickedMedia]. Public for tests.
   static PickedMedia fromChannelMap(Map<Object?, Object?> m) {
     int? asInt(Object? v) => v is int ? v : (v is num ? v.toInt() : null);

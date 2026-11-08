@@ -19,7 +19,7 @@ set -euo pipefail
 
 TARGET="${1:?target}"
 PREFIX="$(mkdir -p "${2:?prefix}" && cd "$2" && pwd)"
-FFMPEG_TAG="${FFMPEG_TAG:-n7.1}"
+FFMPEG_TAG="${FFMPEG_TAG:-n8.1.3}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 2)}"
 WORK="${WORK:-$(pwd)/build/ffmpeg-work}"
 SRC="${FFMPEG_SRC:-$WORK/src}"
@@ -36,7 +36,7 @@ BSFS=h264_mp4toannexb,hevc_mp4toannexb,vp9_superframe_split,extract_extradata
 
 COMMON=(
   --disable-everything --disable-programs --disable-doc --disable-network
-  --disable-avdevice --disable-avfilter --disable-postproc --disable-debug
+  --disable-avdevice --disable-avfilter --disable-debug
   --enable-static --disable-shared --enable-pic
   --enable-avcodec --enable-avformat --enable-avutil --enable-swscale --enable-swresample
   --enable-protocol=file,pipe

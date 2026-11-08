@@ -67,7 +67,7 @@ if(CUTLAB_WITH_MEDIA)
       target_link_libraries(cutlab_core PRIVATE ${CUTLAB_FFMPEG_ROOT}/lib/lib${lib}.a)
     endforeach()
     if(ANDROID)
-      target_link_libraries(cutlab_core PRIVATE z m log android mediandk)
+      target_link_libraries(cutlab_core PRIVATE z m dl log android mediandk)
       # Keep FFmpeg's static symbols out of the exported table.
       target_link_options(cutlab_core PRIVATE -Wl,--exclude-libs,ALL -Wl,--gc-sections)
     elseif(UNIX AND NOT APPLE)
