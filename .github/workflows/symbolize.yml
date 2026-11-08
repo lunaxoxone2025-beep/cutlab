@@ -1,0 +1,47 @@
+name: Symbolize crash
+
+# Turns the libcutlab_core.so offsets of a crash report (Settings →
+# Diagnostics, "backtrace") into function names, using the unstripped
+# library kept by the build that produced the APK.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run id of the "Flutter builds" run that made the APK'
+        required: true
+      offsets:
+        description: 'Space-separated offsets in libcutlab_core.so, e.g. "0x621554 0x122218"'
+        required: true
+
+jobs:
+  symbolize:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cutlab-android-symbols
+          path: symbols
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Resolve
+        env:
+          OFFSETS: ${{ inputs.offsets }}
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          LIB=symbols/libcutlab_core-arm64-v8a.so
+          ls -la symbols
+          for off in $OFFSETS; do
+            # Return addresses point after the call: also look 4 bytes back.
+            prev=$(printf '0x%x' $(( off - 4 )))
+            echo "== $off"
+            "$BIN/llvm-symbolizer" --obj="$LIB" --demangle --inlines --functions=linkage "$off" "$prev"
+          done
+          echo "== disassembly around each offset (calls)"
+          for off in $OFFSETS; do
+            start=$(printf '0x%x' $(( off - 64 ))); stop=$(printf '0x%x' $(( off + 8 )))
+            echo "-- $off"
+            "$BIN/llvm-objdump" -d --no-show-raw-insn --demangle --start-address=$start --stop-address=$stop "$LIB" | grep -E "bl|blr|<" | tail -12
+          done
