@@ -306,9 +306,10 @@ void main() {
     await h.pump(tester, phone);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.textContaining('FFmpeg fake'));
+    await tester.scrollUntilVisible(find.textContaining('FFmpeg fake'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('FFmpeg fake'), findsOneWidget);
-    await tester.ensureVisible(find.text('540p'));
+    expect(find.byKey(const Key('openDiagnostics')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('540p'), -200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('540p'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('hardwareDecoding')));
