@@ -124,6 +124,48 @@ Automated checks:
 | `test/export_test.dart` | Settings (sizes, defaults, formats, bitrate formula, engine text), titles (time spans, drawing, placement), controller (plan, encoder order, progress, pause, heat pause, stop, failure and retry in software, result check), export screen. |
 | `integration_test/export_test.dart` | In the real app on the Android emulators and on Windows: every working encoder exports 2 s and is read back; then a project is exported from the editor (export screen, progress, saved file, in-app check), and the file's title pixels and sound are checked. |
 
+## Performance (measured in CI)
+
+`cutlab_export_tests --bench`, 3 s of each real-size recording (2 s for 4K),
+encoder effort "balanced", picture + sound. Columns: encoding frames per
+second, × real time (1.00 = as fast as the video plays), and the bitrate
+written at quality High.
+
+**Linux CI machine (4 CPU cores, software encoders):**
+
+| Source → output | H.264 (OpenH264) | HEVC (kvazaar) | VP9 (libvpx) | AV1 (SVT-AV1) |
+|---|---|---|---|---|
+| 1080p60 H.264 → 1080p60 | 132 fps (2.2×), 12.2 Mbit/s | 70 fps (1.2×), 9.4 | 18 fps (0.3×), 18.3 | 113 fps (1.9×), 15.2 |
+| 1080p60 HEVC → 1080p60 | 142 fps (2.4×) | 66 fps (1.1×) | 16 fps (0.3×) | 124 fps (2.1×) |
+| 1080p30 → 720p30 | 145 fps (4.8×), 3.2 Mbit/s | 120 fps (4.0×) | 28 fps (0.9×) | 159 fps (5.3×) |
+| 4K HEVC 10-bit → 4K30 | 30 fps (1.0×), 27.6 Mbit/s | 17 fps (0.6×) | 4 fps (0.1×) | 23 fps (0.8×) |
+
+**Android emulator (x86_64, 2 cores, software encoders; a phone's ARM cores and its hardware encoder will differ):**
+
+| Source → output | H.264 (OpenH264) | HEVC (kvazaar) | VP9 (libvpx) |
+|---|---|---|---|
+| 1080p60 → 1080p60 | 108–109 fps (1.8×) | 11–12 fps (0.2×) | 50–56 fps (0.8–0.9×) |
+| 1080p30 → 720p30 | 97–131 fps (3.3–4.4×) | 23–28 fps (0.8–0.9×) | 62–72 fps (2.1–2.4×) |
+| 4K HEVC 10-bit → 4K30 | 23 fps (0.8×) | 3–3.5 fps (0.1×) | 9–11 fps (0.3×) |
+
+On the emulators, a 2-second 720p30 export with Android's own (MediaCodec)
+encoders took about 0.5–0.8 s for H.264, VP9 and AV1 and 5–6 s for HEVC.
+The emulator's HEVC MediaCodec encoder is a slow software one; a phone has a
+hardware one.
+
+**Other measurements:**
+
+- 2-hour recording at 192×108, 24 fps: 172,800 frames in 29 s on Linux CI (about 250× real time), with the A/V position exact at the end.
+- Windows CI, Windows' own H.264 encoder (software): 145 fps at 1080p30, 39 fps at 4K24.
+- Exported from the real app's export screen (720p30, 4 s project): 1–2 s on the emulators and about 1 s on Windows.
+
+**Reading these for gaming footage:**
+
+- At 1080p60, software H.264 and SVT-AV1 export faster than real time on a PC.
+- A 1-hour 1080p60 recording takes roughly 25–30 min with H.264 on the CI machine. It should be quicker on a desktop with a GPU encoder (NVENC/Quick Sync/AMF), but that is not measured in CI.
+- kvazaar HEVC is slow on phones without a hardware HEVC encoder. Prefer H.264 there, or a phone whose hardware HEVC encoder passes the test.
+- libvpx VP9 is the slowest; use "Fast" effort for long VP9 exports.
+
 ## Settings text (app → engine)
 
 `cutlab_export_start(plan, settings)`. The plan is the playback plan
@@ -185,7 +227,8 @@ scope for this personal project.
 | Background colour | Gaps and borders are always black; the project's background setting is not used yet. |
 | HDR | HDR/10-bit sources are converted to 8-bit SDR BT.709 without tone mapping (colours may look flat); output is 8-bit. |
 | Titles | Plain centred text, the same as the monitor. |
-| Android hardware encoders | Tested on the emulators' encoders only. The owner's phone's encoders, speed, heat and battery behaviour are not measured yet. |
+| Android hardware encoders | Tested on the emulators' MediaCodec encoders (H.264, HEVC, VP9, AV1 on Android 14; H.264 on Android 9). The owner's phone's encoders, speed, heat and battery behaviour are not measured yet. |
+| kvazaar HEVC speed | Software HEVC is slow (0.2× real time at 1080p60 on the emulator); hardware HEVC or H.264 is recommended on phones. |
 | Windows GPU encoders | The CI machines have no GPU: NVENC/Quick Sync/AMF are tested only in the sense that they fail cleanly and the export falls back. |
 | Software AV1 on phones | Not included (minutes per second of video); AV1 on Android needs a hardware encoder. |
 | Faststart | MP4/MOV files are rewritten at the end so they start playing at once; for very long exports this "Finishing" step takes a while. |

@@ -67,7 +67,7 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ⚠️ Not yet measured on the owner's phone and PC
 
 
-## Phase 6 — Export ⏳ (implemented; being verified in CI)
+## Phase 6 — Export ✅ (verified in CI, on Android emulators and Windows; owner device check pending)
 
 - ✅ Whole-project rendering from the original files: top-most visible clip, letterbox, rotation, photos, titles, gaps, exact project length; the Phase 5 mixer offline (volume, mute, solo, fades, master); constant frame rate with the right source frame for every output frame
 - ✅ H.264, HEVC, VP9, AV1 in MP4/MOV/WebM/MKV; hardware encoders (MediaCodec, NVENC, Quick Sync, AMF, Media Foundation) with automatic fallback to software (OpenH264, kvazaar, libvpx, SVT-AV1); all LGPL/BSD
