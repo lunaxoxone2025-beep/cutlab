@@ -121,7 +121,7 @@ jobs:
           M=build/android-media; T=build/test-media
           VG="valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect"
           $VG build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
-          CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
+          CUTLAB_UNDER_VALGRIND=1 CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
       - name: Timeline benchmark (Linux)
         run: build/core/cutlab_bench_timeline build/test-media build/android-media
 
