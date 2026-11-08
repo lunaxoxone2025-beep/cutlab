@@ -133,12 +133,12 @@ written at quality High.
 
 **Linux CI machine (4 CPU cores, software encoders):**
 
-| Source → output | H.264 (OpenH264) | HEVC (kvazaar) | VP9 (libvpx) | AV1 (SVT-AV1) |
+| Source → output | H.264 (OpenH264) | HEVC (kvazaar) | VP9 (libvpx) | AV1 (SVT-AV1 2.3) |
 |---|---|---|---|---|
-| 1080p60 H.264 → 1080p60 | 132 fps (2.2×), 12.2 Mbit/s | 70 fps (1.2×), 9.4 | 18 fps (0.3×), 18.3 | 113 fps (1.9×), 15.2 |
-| 1080p60 HEVC → 1080p60 | 142 fps (2.4×) | 66 fps (1.1×) | 16 fps (0.3×) | 124 fps (2.1×) |
-| 1080p30 → 720p30 | 145 fps (4.8×), 3.2 Mbit/s | 120 fps (4.0×) | 28 fps (0.9×) | 159 fps (5.3×) |
-| 4K HEVC 10-bit → 4K30 | 30 fps (1.0×), 27.6 Mbit/s | 17 fps (0.6×) | 4 fps (0.1×) | 23 fps (0.8×) |
+| 1080p60 H.264 → 1080p60 | 132 fps (2.2×), 12.2 Mbit/s | 70 fps (1.2×), 9.4 | 18 fps (0.3×), 18.3 | 61 fps (1.0×), 13.9 |
+| 1080p60 HEVC → 1080p60 | 142 fps (2.4×) | 66 fps (1.1×) | 16 fps (0.3×) | 64 fps (1.1×) |
+| 1080p30 → 720p30 | 145 fps (4.8×), 3.2 Mbit/s | 120 fps (4.0×) | 28 fps (0.9×) | 92 fps (3.1×) |
+| 4K HEVC 10-bit → 4K30 | 30 fps (1.0×), 27.6 Mbit/s | 17 fps (0.6×) | 4 fps (0.1×) | 16 fps (0.5×) |
 
 **Android emulator (x86_64, 2 cores, software encoders; a phone's ARM cores and its hardware encoder will differ):**
 
@@ -155,13 +155,13 @@ hardware one.
 
 **Other measurements:**
 
-- 2-hour recording at 192×108, 24 fps: 172,800 frames in 29 s on Linux CI (about 250× real time), with the A/V position exact at the end.
+- 2-hour recording at 192×108, 24 fps: 172,800 frames in 29–38 s on Linux CI (about 200–250× real time), with the A/V position exact at the end.
 - Windows CI, Windows' own H.264 encoder (software): 145 fps at 1080p30, 39 fps at 4K24.
 - Exported from the real app's export screen (720p30, 4 s project): 1–2 s on the emulators and about 1 s on Windows.
 
 **Reading these for gaming footage:**
 
-- At 1080p60, software H.264 and SVT-AV1 export faster than real time on a PC.
+- At 1080p60, software H.264 exports about twice as fast as real time on a PC; SVT-AV1 about real time.
 - A 1-hour 1080p60 recording takes roughly 25–30 min with H.264 on the CI machine. It should be quicker on a desktop with a GPU encoder (NVENC/Quick Sync/AMF), but that is not measured in CI.
 - kvazaar HEVC is slow on phones without a hardware HEVC encoder. Prefer H.264 there, or a phone whose hardware HEVC encoder passes the test.
 - libvpx VP9 is the slowest; use "Fast" effort for long VP9 exports.
@@ -233,5 +233,6 @@ scope for this personal project.
 | Software AV1 on phones | Not included (minutes per second of video); AV1 on Android needs a hardware encoder. |
 | Faststart | MP4/MOV files are rewritten at the end so they start playing at once; for very long exports this "Finishing" step takes a while. |
 | Android 7–9 | The video stays in the app's folder instead of the gallery. |
+| SVT-AV1 version | SVT-AV1 3.1 sometimes never finished a stream in CI, so the Linux/CI build uses 2.3.0 (30 of 30 short AV1 exports finish; about half the speed of 3.1). The Windows build uses BtbN's SVT-AV1. If any encoder stops responding for 60 s, the export is reported as failed instead of hanging, and closing it never blocks the app for more than 3 s. |
 | WebM/Opus and old players | Ubuntu's FFmpeg 6.1 rejects one Opus packet in WebM exports (written by libopus 1.5); FFmpeg 8.1 and CUTLAB read them correctly. Players built on old FFmpeg versions may complain; MP4 with AAC (the default) is not affected. |
 | AV1 import (Linux, emulator builds) | These engine builds have no AV1 decoder, so AV1 files cannot be previewed there (exports are checked with ffprobe instead). |
