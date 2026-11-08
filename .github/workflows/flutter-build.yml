@@ -43,7 +43,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -95,7 +94,9 @@ jobs:
 
   windows:
     name: Windows
-    runs-on: windows-latest
+    # Pinned: Flutter 3.24 detects Visual Studio 2019/2022 only, and newer
+    # windows-latest images ship a later Visual Studio.
+    runs-on: windows-2022
     defaults:
       run:
         working-directory: apps/cutlab
