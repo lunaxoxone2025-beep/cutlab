@@ -385,8 +385,13 @@ void test_start_stop_cycles_and_edits() {
   CHECK(!after.empty());
   CHECK(black == 0);
   // The meters follow what is heard (steady clock without a device).
+  // Under valgrind the mix can lag behind the clock for a moment: poll up to 3 s.
   float lv[3] = {0, 0, 0};
-  CHECK(cutlab_timeline_levels(t, lv, 3) == 3);
+  for (int i = 0; i < 150; ++i) {
+    CHECK(cutlab_timeline_levels(t, lv, 3) == 3);
+    if (lv[1] > 0.0f || !cutlab_timeline_playing(t)) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
   std::printf("levels while playing: video %.2f, tone %.2f, master %.2f\n", lv[0], lv[1], lv[2]);
   CHECK(lv[1] > 0.1f && lv[1] < 0.2f);  // 0.5 × 0.3
   cutlab_timeline_pause(t);
