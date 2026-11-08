@@ -158,7 +158,10 @@ class EditorController extends ChangeNotifier {
   /// Removes media that no clip uses. Returns false when it is still in use.
   bool removeMedia(String mediaId) {
     if (_project.clipsUsingMedia(mediaId) > 0) return false;
-    edit((p) => p.copyWith(media: [for (final m in p.media) if (m.id != mediaId) m]));
+    edit((p) => p.copyWith(media: [
+          for (final m in p.media)
+            if (m.id != mediaId) m
+        ]));
     _available.remove(mediaId);
     _thumbs.remove(mediaId);
     return true;

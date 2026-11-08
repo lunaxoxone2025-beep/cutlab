@@ -279,7 +279,8 @@ class _ProjectCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, color: entry.error != null ? CutlabColors.danger : CutlabColors.textMuted)),
                     if (entry.modifiedAt != null)
-                      Text('Edited ${formatDateTime(entry.modifiedAt!)}', style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
+                      Text('Edited ${formatDateTime(entry.modifiedAt!)}',
+                          style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
                     if (entry.hasRecovery)
                       const Padding(
                         padding: EdgeInsets.only(top: CutlabSpacing.xs),

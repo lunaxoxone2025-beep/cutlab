@@ -93,7 +93,8 @@ class ProjectStore {
     return entries;
   }
 
-  Future<Project> create({required String name, ProjectSettings settings = const ProjectSettings(), EditorMode mode = EditorMode.beginner}) async {
+  Future<Project> create(
+      {required String name, ProjectSettings settings = const ProjectSettings(), EditorMode mode = EditorMode.beginner}) async {
     final p = Project.create(id: newId(), name: name, settings: settings, now: _now()).copyWith(editorMode: mode);
     await save(p);
     return p;

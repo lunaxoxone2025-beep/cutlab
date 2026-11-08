@@ -322,7 +322,9 @@ class _MediaPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              missing == 1 ? '1 file is missing. Use "Relink" to point it to its new location.' : '$missing files are missing. Use "Relink" on each one.',
+              missing == 1
+                  ? '1 file is missing. Use "Relink" to point it to its new location.'
+                  : '$missing files are missing. Use "Relink" on each one.',
               style: const TextStyle(fontSize: 12),
             ),
           ),
@@ -350,7 +352,8 @@ class _MediaPanel extends StatelessWidget {
 }
 
 class _MediaTile extends StatelessWidget {
-  const _MediaTile({super.key, required this.media, required this.thumbnail, required this.available, required this.onRelink, required this.onRemove});
+  const _MediaTile(
+      {super.key, required this.media, required this.thumbnail, required this.available, required this.onRelink, required this.onRemove});
 
   final MediaRef media;
   final Uint8List? thumbnail;
