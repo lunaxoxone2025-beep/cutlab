@@ -856,10 +856,13 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   }
 
   PacketPtr pkt = make_packet();
+  // Packets ready now; returns how many were written. Hardware encoders
+  // (MediaCodec, GPUs) work asynchronously: "not yet" is normal.
   auto drain = [&](AVCodecContext* ctx, AVStream* st) {
+    int written = 0;
     for (;;) {
       const int r = avcodec_receive_packet(ctx, pkt.get());
-      if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) return;
+      if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) return written;
       check(r, ctx == venc ? "video encoding" : "audio encoding");
       if (pkt->size <= 0) {  // nothing to store (some encoders signal the end this way)
         av_packet_unref(pkt.get());
@@ -868,19 +871,52 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
       av_packet_rescale_ts(pkt.get(), ctx->time_base, st->time_base);
       pkt->stream_index = st->index;
       check(av_interleaved_write_frame(run.fmt, pkt.get()), "writing the output file");
+      ++written;
     }
   };
+  // An encoder that neither takes input nor gives output for this long has
+  // stopped working (a stuck hardware encoder): the next encoder takes over.
+  constexpr auto kStuck = std::chrono::seconds(20);
+  auto wait_a_moment = [&](Clock::time_point since, AVCodecContext* ctx) {
+    if (cancel_) throw Cancelled{};
+    if (Clock::now() - since > kStuck) throw MediaError(std::string(ctx->codec->name) + " stopped responding");
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  };
   auto send = [&](AVCodecContext* ctx, AVStream* st, AVFrame* f) {
+    const auto since = Clock::now();
     for (;;) {
       const int r = avcodec_send_frame(ctx, f);
       if (r == AVERROR(EAGAIN)) {
-        drain(ctx, st);
+        if (drain(ctx, st) == 0) wait_a_moment(since, ctx);
         continue;
       }
+      if (r == AVERROR_EOF && !f) break;  // already flushed
       check(r, ctx == venc ? "video encoding" : "audio encoding");
       break;
     }
     drain(ctx, st);
+  };
+  // End of stream: every packet the encoder still holds, until it says EOF.
+  auto finish_encoder = [&](AVCodecContext* ctx, AVStream* st) {
+    send(ctx, st, nullptr);
+    auto since = Clock::now();
+    for (;;) {
+      const int r = avcodec_receive_packet(ctx, pkt.get());
+      if (r == AVERROR_EOF) return;
+      if (r == AVERROR(EAGAIN)) {
+        wait_a_moment(since, ctx);
+        continue;
+      }
+      check(r, ctx == venc ? "video encoding" : "audio encoding");
+      since = Clock::now();
+      if (pkt->size <= 0) {
+        av_packet_unref(pkt.get());
+        continue;
+      }
+      av_packet_rescale_ts(pkt.get(), ctx->time_base, st->time_base);
+      pkt->stream_index = st->index;
+      check(av_interleaved_write_frame(run.fmt, pkt.get()), "writing the output file");
+    }
   };
 
   // ---- audio
@@ -1143,8 +1179,8 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   // ---- finish: flush encoders, write the index, rename.
   set_state(State::finishing);
   encode_audio_until(total_samples, true);
-  if (run.aenc) send(run.aenc.get(), run.ast, nullptr);
-  send(venc, run.vst, nullptr);
+  if (run.aenc) finish_encoder(run.aenc.get(), run.ast);
+  finish_encoder(venc, run.vst);
   for (auto& v : videos) decode_errors_seen += v.second.dec ? v.second.dec->decode_errors() : 0;
   check(av_write_trailer(run.fmt), "finishing the output file");
   {
