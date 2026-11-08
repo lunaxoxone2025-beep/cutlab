@@ -78,10 +78,10 @@ jobs:
           channel: stable
           cache: true
       - run: dart pub get
-      - name: Format check
-        run: dart format --output=none --set-exit-if-changed --line-length 140 .
       - run: dart analyze --fatal-infos
       - run: dart test
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed --line-length 140 .
 
   flutter-app:
     name: Flutter app — analyze & test
@@ -97,7 +97,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Format check
-        run: dart format --output=none --set-exit-if-changed --line-length 140 lib test
       - run: flutter analyze
       - run: flutter test
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed --line-length 140 lib test
