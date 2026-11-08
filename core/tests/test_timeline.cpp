@@ -379,7 +379,8 @@ void test_start_stop_cycles_and_edits() {
   collect(t, 300);
   const Plan quieter = Plan().track("v1", "video").clip("a", "gray60.mp4", 0, 8 * SEC, 0).track("a1", "audio", false, false, false, 0.3).clip("t", "tone1k.wav", 0, 6 * SEC, 0);
   CHECK(cutlab_timeline_set_plan(t, quieter.text.c_str()) == CUTLAB_OK);
-  auto after = collect(t, 400);
+  // Under valgrind everything runs ~50x slower: give the picture more time.
+  auto after = collect(t, std::getenv("CUTLAB_UNDER_VALGRIND") ? 4000 : 400);
   int black = 0;
   for (const auto& s : after) black += s.w == 0;
   CHECK(!after.empty());
