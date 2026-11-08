@@ -109,7 +109,7 @@ clip <id> <start> <duration> <in-point> <volume> <fade-in> <fade-out> <audio 0|1
 |---|---|
 | Picture compositing | Only the top-most visible picture is shown; there is no blending, picture-in-picture or transparency. Transitions, effects, keyframes and colour work are not rendered yet (they are planned for later phases). |
 | Clip speed / reverse | Not supported in playback (the editor has no control for them yet); such clips play at normal speed. |
-| Title styling | Titles are plain centred text drawn over the picture. |
+| Title styling | Titles are plain centred text drawn over the picture (sized with the picture, the same as in exported videos). |
 | Audio while scrubbing | No sound while dragging the cursor; sound only during playback. |
 | Reaction time of mix changes | ~0.2 s (audio mixed ahead) plus the device latency. |
 | Fades | Linear only (no curve choice yet). |

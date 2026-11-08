@@ -67,9 +67,16 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ⚠️ Not yet measured on the owner's phone and PC
 
 
-## Phase 6 — Export ⬜
+## Phase 6 — Export ⏳ (implemented; being verified in CI)
 
-MP4/H.264 export through platform encoders, resolution/fps/bitrate settings, progress + ETA, cancel, output validation (re-probe), export history. **Milestone: Flutter edition reaches parity with Lite → Lite import path → Lite retired.**
+- ✅ Whole-project rendering from the original files: top-most visible clip, letterbox, rotation, photos, titles, gaps, exact project length; the Phase 5 mixer offline (volume, mute, solo, fades, master); constant frame rate with the right source frame for every output frame
+- ✅ H.264, HEVC, VP9, AV1 in MP4/MOV/WebM/MKV; hardware encoders (MediaCodec, NVENC, Quick Sync, AMF, Media Foundation) with automatic fallback to software (OpenH264, kvazaar, libvpx, SVT-AV1); all LGPL/BSD
+- ✅ 480p–4K, 24/30/60/120 fps, quality presets, manual bitrate, encoder effort, keyframes, audio bitrate, threads; size estimate
+- ✅ Export screen: progress, speed, time left, pause/resume, stop (nothing left behind), errors, retry in software, the finished file read back and compared with the settings
+- ✅ Android: hardware encoders tested in a separate process, background export (foreground service, wake lock), pause when hot, gallery (Movies/CUTLAB); Windows: save dialog, GPU first, Show file
+- ✅ Tests: native export suite (every picture/sound check against the sources, all formats, sizes, rates, cancel, broken media, 2-hour export) + independent ffprobe check of every file, Dart/widget tests, integration tests in the real app on Android emulators and Windows
+- ➡️ Not in this phase: resuming an export after the app was closed, compositing/effects/transitions (Phases 7–8), HDR tone mapping, export history list
+- ⚠️ Not yet measured on the owner's phone and PC (encoders, speed, heat)
 
 ## Phase 7 — Gaming Studio ⬜
 
@@ -89,5 +96,5 @@ Final testing on the owner's phone and PC, documentation, stable APK and Windows
 
 ## Exact next step
 
-1. **Owner device check** of the `dev` build 0.4.1: preview the videos that crashed before, on the phone. If CUTLAB still closes, reopen it and save the report from Settings → Diagnostics.
-2. **Phase 6:** export (MP4/H.264 + the Phase 5 mix), reusing the timeline renderer and `cutlab_timeline_render_audio`.
+1. **Owner device check** of Phase 6: export a long COD Mobile / Minecraft recording at 1080p60 (H.264 and HEVC) on the phone and on the PC; note the speed, the encoder used and whether the phone gets hot.
+2. **Phase 7:** Gaming Studio.

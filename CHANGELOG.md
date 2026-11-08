@@ -1,5 +1,15 @@
 # Changelog
 
+## CUTLAB 0.6 — Phase 6: video export (2026-11-08)
+
+- Export the whole project to a video file: every clip, sound track, volume, mute/solo, fade and title, rendered from the original files at the export size; gaps black and silent; exact length and frame rate.
+- H.264, H.265/HEVC, VP9 and AV1 in MP4, MOV, WebM or MKV; AAC or Opus sound. Hardware encoders (phone MediaCodec, NVIDIA, Intel, AMD, Windows) when they work, software encoders otherwise, switching automatically if one fails.
+- 480p to 4K, 24/30/60/120 fps, quality presets (Best, High, Standard, Small file), and in advanced mode a fixed bitrate, encoder effort, file format, audio bitrate, keyframes and threads. Estimated file size.
+- Export screen with progress, speed, time left, pause/resume and stop. The finished file is read back and checked against the settings.
+- Android: exports continue in the background (notification), pause when the phone is too hot, and land in the gallery (Movies/CUTLAB). Windows: choose where to save; Show file.
+- Titles in the monitor now scale with the picture, exactly as in the exported video.
+- Tests: native export suite with every exported picture and sound checked against the sources, a 2-hour export, an independent ffprobe check of every file, integration tests in the real app on Android emulators and Windows.
+
 ## CUTLAB 0.5 — Phase 5: timeline playback and audio engine (2026-11-08)
 
 - Play the edited timeline: continuous playback across cuts, gaps and overlapping tracks, photos, next clip prepared ahead, frame-accurate seeking, the cursor follows the sound.

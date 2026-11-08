@@ -17,7 +17,7 @@ Both Android apps can be installed side by side. Newer builds install over older
 
 ## Status
 
-**CUTLAB** — Phase 5 of 10: project library with autosave/recovery, media import without copying files, native FFmpeg media engine, multitrack timeline, and real-time timeline playback with an audio mixer (volume, mute, solo, fades, meters, audio-clocked sync). Export arrives in Phase 6 ([roadmap](docs/ROADMAP.md), [playback](docs/PLAYBACK.md), [timeline](docs/TIMELINE.md), [engine](docs/ENGINE.md)).
+**CUTLAB** — Phase 6 of 10: project library with autosave/recovery, media import without copying files, native FFmpeg media engine, multitrack timeline, real-time timeline playback with an audio mixer, and video export (H.264/HEVC/VP9/AV1, 480p–4K, 24–120 fps, hardware or software encoding) ([roadmap](docs/ROADMAP.md), [export](docs/EXPORT.md), [playback](docs/PLAYBACK.md), [timeline](docs/TIMELINE.md), [engine](docs/ENGINE.md)).
 
 Android build: arm64, Android 7.0 or newer.
 

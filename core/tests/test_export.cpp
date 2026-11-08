@@ -685,8 +685,8 @@ void bench(const std::string& real, const std::vector<Enc>& encs, bool hardware)
     const char* fps;
     double seconds;
   };
-  const Job jobs[] = {{"h264_1080p60.mp4", 1920, 1080, "60", 6}, {"hevc_1080p60.mp4", 1920, 1080, "60", 6},
-                      {"h264_1080p30.mp4", 1280, 720, "30", 6},  {"hevc10_4k30.mp4", 3840, 2160, "30", 3}};
+  const Job jobs[] = {{"h264_1080p60.mp4", 1920, 1080, "60", 3}, {"hevc_1080p60.mp4", 1920, 1080, "60", 3},
+                      {"h264_1080p30.mp4", 1280, 720, "30", 3},  {"hevc10_4k30.mp4", 3840, 2160, "30", 2}};
   std::printf("export benchmark (%s):\n", hardware ? "hardware allowed" : "software");
   std::printf("%-22s %-10s %-10s %-14s %8s %8s %10s\n", "source", "output", "codec", "encoder", "fps", "x real", "kbit/s");
   for (const auto& j : jobs) {
@@ -743,6 +743,9 @@ int main(int argc, char** argv) {
   for (const auto& e : encs) std::printf(" %s(%s%s)", e.name.c_str(), e.codec.c_str(), e.hardware ? ",hw" : "");
   std::printf("\n");
   if (!has_sw(encs, "h264")) g_codec = has_sw(encs, "hevc") ? "hevc" : "mpeg4";
+  // Valgrind runs use FFmpeg's own encoder, so the report is about CUTLAB's
+  // code rather than the encoder libraries' hand-written assembly.
+  if (const char* forced = std::getenv("CUTLAB_EXPORT_CODEC")) g_codec = forced;
   std::printf("timeline tests use %s\n", g_codec.c_str());
 
   if (!bench_dir.empty()) {
