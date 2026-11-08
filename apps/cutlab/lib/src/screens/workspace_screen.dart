@@ -249,33 +249,34 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     };
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= kDesktopBreakpoint;
-    Widget body = SafeArea(child: wide ? _desktop() : _mobile());
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      body = DropTarget(
-        onDragEntered: (_) => setState(() => _dropping = true),
-        onDragExited: (_) => setState(() => _dropping = false),
-        onDragDone: (d) {
-          setState(() => _dropping = false);
-          unawaited(_onDrop([for (final f in d.files) f.path]));
-        },
-        child: Stack(children: [
-          Positioned.fill(child: body),
-          if (_dropping)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  color: CutlabColors.accent.withAlpha(40),
-                  alignment: Alignment.center,
-                  child: const Text('Drop to import and add to the timeline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                ),
+  /// Desktop: files dropped from Explorer are imported and placed.
+  Widget _withDrop(Widget body) {
+    if (kIsWeb || !(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) return body;
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _dropping = true),
+      onDragExited: (_) => setState(() => _dropping = false),
+      onDragDone: (d) {
+        setState(() => _dropping = false);
+        unawaited(_onDrop([for (final f in d.files) f.path]));
+      },
+      child: Stack(children: [
+        Positioned.fill(child: body),
+        if (_dropping)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                color: CutlabColors.accent.withAlpha(40),
+                alignment: Alignment.center,
+                child: const Text('Drop to import and add to the timeline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               ),
             ),
-        ]),
-      );
-    }
+          ),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: _shortcuts,
       child: Focus(
@@ -283,31 +284,34 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         autofocus: true,
         child: ListenableBuilder(
           listenable: c,
-          builder: (context, _) => Scaffold(
-            appBar: AppBar(
-              titleSpacing: 0,
-              title: InkWell(
-                onTap: _rename,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: CutlabSpacing.sm),
-                  child: Text(c.project.name, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-              actions: [
-                IconButton(
-                    key: const Key('undo'), tooltip: 'Undo (Ctrl+Z)', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
-                IconButton(
-                    key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
-                _SaveButton(state: c.saveState, onSave: _save),
-                if (wide)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),
-                    child: _ModeSwitch(mode: c.project.editorMode, onChanged: c.setMode),
+          builder: (context, _) {
+            final wide = MediaQuery.sizeOf(context).width >= kDesktopBreakpoint;
+            return Scaffold(
+              appBar: AppBar(
+                titleSpacing: 0,
+                title: InkWell(
+                  onTap: _rename,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: CutlabSpacing.sm),
+                    child: Text(c.project.name, overflow: TextOverflow.ellipsis),
                   ),
-              ],
-            ),
-            body: body,
-          ),
+                ),
+                actions: [
+                  IconButton(
+                      key: const Key('undo'), tooltip: 'Undo (Ctrl+Z)', icon: const Icon(Icons.undo), onPressed: c.canUndo ? c.undo : null),
+                  IconButton(
+                      key: const Key('redo'), tooltip: 'Redo (Ctrl+Y)', icon: const Icon(Icons.redo), onPressed: c.canRedo ? c.redo : null),
+                  _SaveButton(state: c.saveState, onSave: _save),
+                  if (wide)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: CutlabSpacing.sm),
+                      child: _ModeSwitch(mode: c.project.editorMode, onChanged: c.setMode),
+                    ),
+                ],
+              ),
+              body: _withDrop(SafeArea(child: wide ? _desktop() : _mobile())),
+            );
+          },
         ),
       ),
     );
