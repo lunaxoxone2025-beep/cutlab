@@ -724,6 +724,33 @@ void bench(const std::string& real, const std::vector<Enc>& encs, bool hardware)
   }
 }
 
+// Many short AV1 exports in a row: SVT-AV1 once failed to finish a stream
+// in CI (preset 12); this shows whether it still happens.
+void av1_repeat(const std::vector<Enc>& encs, int times) {
+  if (!has_sw(encs, "av1")) {
+    std::printf("av1 repeat: no software AV1 encoder\n");
+    return;
+  }
+  const Plan p = Plan().track("v", "video").clip("a", media("gray60.mp4"), 0, 2 * SEC, 0).track("t", "audio").clip("t", media("tone1k.wav"), 0, 2 * SEC, 0);
+  int done = 0;
+  for (int i = 0; i < times; ++i) {
+    for (const char* speed : {"fast", "balanced"}) {
+      Settings s;
+      s.path = out_path("av1_repeat.webm");
+      s.container = "webm";
+      s.video = "av1";
+      s.audio = has_sw(encs, "opus") ? "opus" : "none";
+      s.speed = speed;
+      double secs = 0;
+      const std::string st = run_export(p, s, &secs, 120);
+      CHECK(str(st, "state") == "done");
+      done += str(st, "state") == "done";
+      if (str(st, "state") != "done") std::printf("av1 repeat %d (%s): %s\n", i, speed, st.c_str());
+    }
+  }
+  std::printf("av1 repeat: %d of %d exports finished\n", done, times * 2);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -736,6 +763,7 @@ int main(int argc, char** argv) {
   const char* out = std::getenv("CUTLAB_TEST_OUT");
   g_out = out ? out : ".";
   bool long_test = false, long_only = false, hw_bench = false;
+  int av1_times = 0;
   std::string bench_dir;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
@@ -744,6 +772,7 @@ int main(int argc, char** argv) {
     if (a == "--quick") g_quick = true;
     if (a == "--bench" && i + 1 < argc) bench_dir = argv[++i];
     if (a == "--hardware") hw_bench = true;
+    if (a == "--av1-repeat" && i + 1 < argc) av1_times = std::atoi(argv[++i]);
   }
 
   const auto encs = encoders();
@@ -759,6 +788,11 @@ int main(int argc, char** argv) {
   if (!bench_dir.empty()) {
     bench(bench_dir, encs, hw_bench);
     return 0;
+  }
+  if (av1_times > 0) {
+    av1_repeat(encs, av1_times);
+    std::printf("%d checks, %d failures\n", g_checks, g_failures);
+    return g_failures == 0 ? 0 : 1;
   }
   if (long_only) {
     test_long_export();

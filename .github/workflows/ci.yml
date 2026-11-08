@@ -101,6 +101,14 @@ jobs:
         run: |
           mkdir -p "$CUTLAB_TEST_OUT"
           ctest --test-dir build/core -C Release --output-on-failure -V
+      - name: SVT-AV1 finishes every stream (30 short exports)
+        timeout-minutes: 20
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/av1-out
+        run: |
+          mkdir -p "$CUTLAB_TEST_OUT"
+          build/core/cutlab_export_tests --av1-repeat 15 2>/dev/null
       - name: Export a 2-hour recording
         env:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media

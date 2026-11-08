@@ -149,7 +149,7 @@ void configure_video(AVCodecContext* ctx, const std::string& name, const ExportS
       vbr();
     }
   } else if (name == "libsvtav1") {
-    set("preset", fast ? "12" : best ? "7" : "10");
+    set("preset", fast ? "11" : best ? "7" : "10");  // 12–13 are real-time presets; 12 sometimes never finished the stream (seen in CI)
     if (cq) {
       set("crf", std::to_string(clampi(55 - q * 0.33, 1, 63)));
     } else {
