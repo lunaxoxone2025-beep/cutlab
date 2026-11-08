@@ -107,7 +107,9 @@ static void test_info_and_errors() {
 
   json = nullptr;
   CHECK(cutlab_media_probe(path("does-not-exist.mp4").c_str(), &json) == CUTLAB_ERR_MEDIA);
-  CHECK(std::string(cutlab_last_error()).find("does-not-exist") != std::string::npos);
+  // Errors say what went wrong but never contain the file name or path (privacy).
+  CHECK(std::string(cutlab_last_error()).find("does-not-exist") == std::string::npos);
+  CHECK(std::string(cutlab_last_error()).find("mp4 file") != std::string::npos);
   CHECK(cutlab_media_probe(nullptr, &json) == CUTLAB_ERR_INVALID_ARGUMENT);
   CHECK(cutlab_media_probe(path("gray60.mp4").c_str(), nullptr) == CUTLAB_ERR_INVALID_ARGUMENT);
 }

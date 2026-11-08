@@ -63,6 +63,9 @@ void run(const std::string& dir, int expected_signal, void (*crash)()) {
   check(text.find("backtrace:") != std::string::npos && text.find("#00") != std::string::npos, "backtrace included");
   check(text.find("player open fd:42 (test)") != std::string::npos, "recent engine activity included");
   check(text.find("hardware decoders open: 0") != std::string::npos, "hardware decoder count included");
+  // The activity log on disk survives the crash (and a kill, which has no report).
+  const std::string log = read_file(dir + "/engine-activity.log");
+  check(log.find("player open fd:42 (test)") != std::string::npos, "activity log on disk survives the crash");
   if (g_failures) std::printf("--- report ---\n%s\n", text.c_str());
 }
 

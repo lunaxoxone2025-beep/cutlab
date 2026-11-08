@@ -1,7 +1,8 @@
 name: Flutter builds
 
 # Builds the Flutter edition for Android and PC (Windows, Linux) and publishes
-# the installable files to the rolling "dev" release (personal use).
+# the installable files as a new release per build, "cutlab-<version>"
+# (personal use; earlier builds are never deleted).
 #
 # Platform folders are generated with `flutter create` at build time; custom
 # native code lives in apps/cutlab/platform_overlay/ and is copied on top.
@@ -205,7 +206,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish to the "dev" release
+    name: Publish a new release
     needs: [android, windows, linux]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -221,18 +222,22 @@ jobs:
         with:
           name: cutlab-android
           path: dist
-      - name: Replace the dev release
+      - name: Publish as a new release (earlier builds are kept)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # Every build gets its own permanent pre-release "cutlab-<version>".
+          # Nothing is deleted or replaced: older builds (including the
+          # "dev" release, which holds 0.4.20) stay downloadable.
           ls -la dist
-          gh release delete dev --cleanup-tag --yes || true
+          TAG="cutlab-${BUILD_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG already exists: not touching it"; exit 0; fi
           cat > notes.md <<EOF
-          Development build **${BUILD_NAME}** from commit ${GITHUB_SHA::7}.
+          Development build **${BUILD_NAME}** from commit ${GITHUB_SHA::7}. Earlier builds stay available on the Releases page.
 
           - **Android:** download \`CUTLAB.apk\` on the phone and install it. Newer builds install over older ones and keep your projects.
           - **Windows:** unzip \`CUTLAB-windows-x64.zip\` and run \`cutlab.exe\`.
           - **Linux:** extract \`CUTLAB-linux-x64.tar.gz\` and run \`./cutlab\`.
           EOF
-          gh release create dev dist/* --target "$GITHUB_SHA" --prerelease --title "CUTLAB dev ${BUILD_NAME}" --notes-file notes.md
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --prerelease --title "CUTLAB ${BUILD_NAME}" --notes-file notes.md

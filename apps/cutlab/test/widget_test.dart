@@ -280,6 +280,33 @@ void main() {
     expect(h.media.closed, contains('/v/clip.mp4'), reason: 'the file is released after the viewer closes');
   });
 
+  testWidgets('the preview pauses when the app goes to the background', (tester) async {
+    final engine = FakeMediaEngine();
+    final h = Harness(engine: engine);
+    final p = await h.store.create(name: 'Viewer');
+    await h.store.save(p.copyWith(media: [video('clip.mp4', uri: '/v/clip.mp4').toMediaRef('m1')]));
+    engine.probes['/v/clip.mp4'] = videoProbe(seconds: 30);
+    await h.pump(tester, desktop);
+    await tester.tap(find.text('Viewer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('clip.mp4'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('playPause')));
+    await tester.pump(const Duration(milliseconds: 100));
+    final player = engine.players.single;
+    expect(player.playing, isTrue);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.playing, isFalse);
+    expect(player.disposed, isFalse, reason: 'the preview stays open, only paused');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
   testWidgets('after a crash the library says what happened and links to the details', (tester) async {
     final dir = Directory.systemTemp.createTempSync('cutlab_notice');
     addTearDown(() => dir.deleteSync(recursive: true));

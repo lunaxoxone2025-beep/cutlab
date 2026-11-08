@@ -1,5 +1,13 @@
 # Changelog
 
+## CUTLAB 0.4.2 — Android preview crash: root cause fixed (2026-11-08)
+
+- Fixed the crash when previewing on Android. The audio decoder freed an uninitialised channel layout, and on some phones that crashed the app as soon as the sound started. Found from the crash report of the owner's phone.
+- The engine is built so that this kind of mistake cannot crash it again (zero-initialised locals). CI runs valgrind (uninitialised memory, invalid frees, leaks) on every change.
+- Diagnostics: the engine activity log is written to disk as it happens and kept for the next start, even if Android ends the app. Reports no longer contain file names or paths.
+- The preview pauses when CUTLAB goes to the background.
+- Each build is now published as its own release (`cutlab-0.4.N`); earlier builds, including 0.4.20 (the `dev` release), are kept.
+
 ## CUTLAB dev 0.4.1 — Android preview crash fix (2026-11-08)
 
 - Fixed the likely cause of the app closing when previewing: decoder memory. Decoder threads now depend on the video size, timeline frames and thumbnails share a memory budget, and the preview queue is limited. A 4K HEVC 10-bit phone video in the editor used up to ~1.6 GB with 8 cores; it now uses ~0.55 GB.

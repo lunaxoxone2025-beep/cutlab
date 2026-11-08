@@ -198,7 +198,7 @@ class Diagnostics {
   void log(String kind, String message, [StackTrace? stack]) {
     try {
       final rss = ProcessInfo.currentRss ~/ (1024 * 1024);
-      final entry = StringBuffer('${DateTime.now().toIso8601String()} [$kind] rss=${rss}MB $message\n');
+      final entry = StringBuffer('${DateTime.now().toIso8601String()} [$kind] rss=${rss}MB ${redact(message)}\n');
       if (stack != null) entry.writeln(stack.toString().split('\n').take(25).join('\n'));
       final f = _errorLog;
       if (f.existsSync() && f.lengthSync() > _maxLogBytes) {
@@ -206,7 +206,7 @@ class Diagnostics {
         f.writeAsStringSync(text.substring(text.length ~/ 2));
       }
       f.writeAsStringSync(entry.toString(), mode: FileMode.append, flush: true);
-      engine.note('$kind error: ${message.split('\n').first}');
+      engine.note('$kind error: ${redact(message.split('\n').first)}');
     } on Object {
       // Logging must never cause another error.
     }
@@ -219,8 +219,36 @@ class Diagnostics {
     if (await _errorLog.exists()) await _errorLog.delete();
   }
 
-  /// Everything in one text, for copying or saving.
-  Future<String> report() async {
+  /// Removes what could identify the user's files: paths, content/file
+  /// URIs and media file names (the engine itself never writes them, but
+  /// error texts from other code might). Kept: codecs, sizes, app paths.
+  static String redact(String text) {
+    var t = text;
+    for (final p in [
+      RegExp(r'(content|file)://\S+'),
+      RegExp(r'/(storage|sdcard|mnt/media_rw|home|Users)/[^\s"\x27]+'),
+      RegExp(r'[A-Za-z]:\\[^\s"\x27]+'),
+      RegExp(r'[^\s"\x27/\\]+\.(mp4|m4v|mov|mkv|webm|avi|3gp|ts|mts|m2ts|flv|wmv|mp3|wav|m4a|aac|flac|ogg|opus|jpg|jpeg|png|webp|heic|gif|cutlab)\b',
+          caseSensitive: false),
+    ]) {
+      t = t.replaceAll(p, '<file>');
+    }
+    return t;
+  }
+
+  /// Engine activity of the previous run (survives crashes and kills).
+  Future<String?> previousActivity() async {
+    final f = File('${directory.path}${Platform.pathSeparator}engine-activity-previous.log');
+    if (!await f.exists()) return null;
+    final text = await f.readAsString();
+    return text.length > 30000 ? text.substring(text.length - 30000) : text;
+  }
+
+  /// Everything in one text, for copying or saving. File names and paths
+  /// are removed (see [redact]).
+  Future<String> report() async => redact(await _report());
+
+  Future<String> _report() async {
     final b = StringBuffer()
       ..writeln('CUTLAB diagnostics report')
       ..writeln('version: $version')
@@ -253,6 +281,13 @@ class Diagnostics {
       ..writeln()
       ..writeln('== Recent engine activity')
       ..writeln(engine.recentActivity());
+    final previous = await previousActivity();
+    if (previous != null && previous.trim().isNotEmpty) {
+      b
+        ..writeln()
+        ..writeln('== Engine activity of the previous run (kept even if CUTLAB was closed by force)')
+        ..writeln(previous);
+    }
     final files = await history();
     b
       ..writeln()

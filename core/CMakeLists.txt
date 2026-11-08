@@ -12,6 +12,7 @@ option(CUTLAB_BUILD_TESTS "Build cutlab core unit tests" ON)
 option(CUTLAB_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(CUTLAB_WITH_MEDIA "Build the FFmpeg media engine" OFF)
 set(CUTLAB_FFMPEG_ROOT "" CACHE PATH "FFmpeg install prefix (include/ and lib/)")
+option(CUTLAB_ZERO_INIT_LOCALS "Zero-initialise local variables the code leaves uninitialised (hardening; OFF for valgrind runs)" ON)
 option(CUTLAB_FFMPEG_SHARED "FFmpeg is a shared build (Windows DLLs)" OFF)
 set(CUTLAB_MINIAUDIO_DIR "" CACHE PATH "Directory containing miniaudio.h (downloaded when empty)")
 
@@ -96,6 +97,16 @@ else()
   endif()
 endif()
 target_compile_options(cutlab_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CUTLAB_WARN_FLAGS}>)
+
+# Hardening: an uninitialised local (like the AVChannelLayout behind the
+# 0.4.x Android preview crash) becomes zero instead of stack garbage.
+if(CUTLAB_ZERO_INIT_LOCALS AND NOT MSVC)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag(-ftrivial-auto-var-init=zero CUTLAB_HAS_ZERO_INIT)
+  if(CUTLAB_HAS_ZERO_INIT)
+    target_compile_options(cutlab_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-ftrivial-auto-var-init=zero>)
+  endif()
+endif()
 
 if(CUTLAB_BUILD_TESTS)
   enable_testing()

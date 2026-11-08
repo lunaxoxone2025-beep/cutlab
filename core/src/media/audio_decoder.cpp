@@ -86,9 +86,13 @@ bool AudioDecoder::decode_more() {
     if (r == 0) {
       AVFrame* f = frame_.get();
       if (!swr_) {
-        AVChannelLayout out_layout;
+        // Zero-initialised: av_channel_layout_copy() first frees what the
+        // destination holds, and stack garbage there made it free() a random
+        // address (the Android preview crash of 0.4.x, see
+        // docs/ANDROID_PREVIEW_CRASH.md).
+        AVChannelLayout out_layout{};
         av_channel_layout_default(&out_layout, channels_);
-        AVChannelLayout in_layout;
+        AVChannelLayout in_layout{};
         if (f->ch_layout.nb_channels > 0) {
           av_channel_layout_copy(&in_layout, &f->ch_layout);
         } else {

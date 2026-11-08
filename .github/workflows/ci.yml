@@ -111,6 +111,17 @@ jobs:
           build/core/cutlab_stress_preview 5 $M/h264_1080p30.mp4 $M/h264_1080p60.mp4 $M/hevc_1080p60.mp4 $M/hevc10_4k30.mp4 \
             $M/phone_portrait_1080p60.mp4 $M/long_720p30_10min.mp4 $M/vfr.mkv $M/tone.mp3 $M/red.png
 
+      - name: Valgrind (uninitialised memory, invalid frees, leaks)
+        run: |
+          sudo apt-get install -y valgrind
+          # Without zero-initialised locals, so valgrind still sees mistakes.
+          cmake -S core -B build/core-vg -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCUTLAB_ZERO_INIT_LOCALS=OFF -DCUTLAB_WITH_MEDIA=ON \
+            -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
+          cmake --build build/core-vg -j 4 --target cutlab_stress_preview
+          M=build/android-media; T=build/test-media
+          valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect \
+            build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
+
   core-windows:
     name: C++ core + media engine (Windows x64)
     needs: test-media

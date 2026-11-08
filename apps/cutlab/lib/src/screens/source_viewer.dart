@@ -59,10 +59,23 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
 
   int get _frameTicks => framesToTicks(1, _fps);
 
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
+    // In the background: stop playback (and the audio device) so nothing
+    // decodes while Android may reclaim the window, memory or audio route.
+    _lifecycle = AppLifecycleListener(onHide: _pauseForBackground);
     unawaited(_open());
+  }
+
+  void _pauseForBackground() {
+    final p = _player;
+    if (p == null) return;
+    if (p.playing) p.pause();
+    _ticker.stop();
+    if (mounted) setState(() => _playing = false);
   }
 
   @override
@@ -79,6 +92,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _close();
     _ticker.dispose();
     super.dispose();
@@ -122,7 +136,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
           return;
         }
       }
-      c.engine.note('preview open ${m.displayName} hardware=$hardware ${_hwNote ?? ''}');
+      c.engine.note('preview open (${m.kind.name}) hardware=$hardware ${_hwNote ?? ''}');
       final player = await _engine.openPlayer(uri, maxWidth: s.previewMaxWidth, maxHeight: s.previewMaxHeight, hardware: hardware);
       if (!mounted || gen != _openGeneration) {
         player.dispose();
@@ -140,7 +154,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
     } on Object catch (e) {
       if (uri != null) unawaited(c.releaseEngineUri(uri));
       if (!mounted || gen != _openGeneration) return;
-      c.engine.note('preview failed ${m.displayName}: $e');
+      c.engine.note('preview failed: $e');
       setState(() {
         _opening = false;
         _error = 'Cannot play this file: $e';
@@ -214,7 +228,7 @@ class _SourceViewerState extends State<SourceViewer> with SingleTickerProviderSt
       final before = _stats.error;
       _stats = p.stats();
       if (_stats.error.isNotEmpty && _stats.error != before) {
-        widget.controller.engine.note('preview decoding error ${widget.media.displayName}: ${_stats.error}');
+        widget.controller.engine.note('preview decoding error: ${_stats.error}');
         setState(() {});
       }
     }

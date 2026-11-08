@@ -29,7 +29,10 @@ int hardware_decoders_open();
 
 /// Installs the crash handler writing to <dir>/native-crash.txt and routes
 /// FFmpeg warnings into the notes. device_info is copied into every report.
-/// Safe to call again (updates the directory and the device text).
+/// Every note is also appended to <dir>/engine-activity.log as it happens
+/// (written straight to the file, so it survives the process being killed,
+/// e.g. by Android when memory runs out); the previous run's log is kept as
+/// engine-activity-previous.log. Safe to call again.
 void init(const std::string& dir, const std::string& device_info);
 
 /// Routes FFmpeg warnings/errors into the notes (also done by init()).

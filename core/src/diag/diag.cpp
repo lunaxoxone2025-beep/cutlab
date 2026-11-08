@@ -52,6 +52,25 @@ char g_device[3072];
 std::mutex g_init_mu;
 bool g_handler_installed = false;
 
+// Activity log on disk: unbuffered appends, restarted when it grows.
+std::mutex g_log_mu;
+std::FILE* g_log = nullptr;
+long g_log_bytes = 0;
+constexpr long kMaxLogBytes = 256 * 1024;
+
+void append_log(const char* line) {
+  std::lock_guard<std::mutex> lock(g_log_mu);
+  if (!g_log) return;
+  if (g_log_bytes > kMaxLogBytes) {
+    g_log = std::freopen(nullptr, "w", g_log);  // start over (keeps the file small)
+    g_log_bytes = 0;
+    if (!g_log) return;
+  }
+  const int n = std::fprintf(g_log, "%s\n", line);
+  std::fflush(g_log);  // into the OS at once: survives the app being killed
+  if (n > 0) g_log_bytes += n;
+}
+
 uint64_t thread_id() {
 #ifdef _WIN32
   return GetCurrentThreadId();
@@ -359,6 +378,7 @@ void note(const char* fmt, ...) {
   const uint32_t slot = g_next.fetch_add(1) % kSlots;
   std::snprintf(g_ring[slot], kSlotSize, "[%7lld.%03lld t%llu] %s", static_cast<long long>(ms / 1000), static_cast<long long>(ms % 1000),
                 static_cast<unsigned long long>(thread_id() % 100000), msg);
+  append_log(g_ring[slot]);
 #ifdef __ANDROID__
   __android_log_print(ANDROID_LOG_INFO, "cutlab", "%s", msg);
 #endif
@@ -409,6 +429,19 @@ void init(const std::string& dir, const std::string& device_info) {
   std::snprintf(g_report_path, sizeof g_report_path, "%s", dir.empty() ? "" : path.c_str());
   std::snprintf(g_device, sizeof g_device, "%s", device_info.c_str());
   capture_ffmpeg_log();
+  if (!dir.empty()) {
+    std::lock_guard<std::mutex> log_lock(g_log_mu);
+    if (!g_log) {
+      std::string base = dir;
+      if (base.back() != '/' && base.back() != '\\') base += '/';
+      const std::string current = base + "engine-activity.log";
+      const std::string previous = base + "engine-activity-previous.log";
+      std::remove(previous.c_str());
+      std::rename(current.c_str(), previous.c_str());
+      g_log = std::fopen(current.c_str(), "w");
+      g_log_bytes = 0;
+    }
+  }
   if (!g_handler_installed && !dir.empty()) {
     install_handler();
     g_handler_installed = true;

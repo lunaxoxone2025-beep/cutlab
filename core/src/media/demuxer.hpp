@@ -15,7 +15,15 @@ struct Source {
   int fd = -1;
 
   static Source parse(const std::string& uri);
-  std::string describe() const { return fd >= 0 ? "fd:" + std::to_string(fd) : path; }
+  /// How the file appears in messages and diagnostics. Never the path or
+  /// the name (they can be personal): only the extension.
+  std::string describe() const {
+    if (fd >= 0) return "the video";
+    const auto slash = path.find_last_of("/\\");
+    const auto dot = path.find_last_of('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return "the file";
+    return "the " + path.substr(dot + 1) + " file";
+  }
 };
 
 /// Owns an AVFormatContext (and a custom I/O context for descriptors).

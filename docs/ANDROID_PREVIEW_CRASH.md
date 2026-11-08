@@ -1,4 +1,50 @@
-# Android preview crash — investigation and fixes (CUTLAB 0.4.1)
+# Android preview crash — investigation and fixes (CUTLAB 0.4.1 → 0.4.2)
+
+## Root cause (confirmed in 0.4.2 from the owner's crash report)
+
+The 0.4.20 build's crash report from the owner's phone pinned it down. Phone: Xiaomi 23053RN02Y (Redmi, MediaTek MT6769, Android 15, 8 GB RAM). Process memory was only ~225 MB, so it was **not** a memory problem.
+
+The engine's crash handler recorded the backtrace and Android's own record added "Pointer tag … was truncated". The `symbolize` workflow resolved the offsets with the unstripped library of that exact build:
+
+```
+abort ← free ← av_freep ← av_channel_layout_copy        (FFmpeg)
+      ← AudioDecoder::decode_more()  audio_decoder.cpp:93
+      ← AudioDecoder::read() ← Player::audio_loop()      (player audio thread)
+```
+
+`decode_more()` declared `AVChannelLayout in_layout;` **without initialising it**. Then it called `av_channel_layout_copy(&in_layout, …)`, which first frees whatever the destination holds. When the leftover stack bytes happened to look like a "custom" layout, FFmpeg called `free()` on a stack address, and Android's allocator aborted the app.
+
+Whether it crashes depends on what an earlier call left on that thread's stack. That depends on the device, compiler and C library, which is why it never happened on Linux, Windows or the emulators. On this phone it happened about 0.1 s after starting the preview of an HEVC 720p phone video: the moment the audio started decoding.
+
+**Fix:**
+- Both layouts are zero-initialised.
+- The engine is now compiled with `-ftrivial-auto-var-init=zero`, so any similar mistake becomes harmless.
+- CI runs valgrind on a build without that option, so new mistakes are still reported. Valgrind flags this exact bug in the old code (60 errors) and reports 0 errors after the fix.
+
+The 0.4.1 changes below (memory limits, separate hardware-decoder test, exception safety) remain. Each one fixes a real way for the app to die.
+
+## Stability review (0.4.2)
+
+| Area | Check | Result |
+|---|---|---|
+| Native memory leaks | valgrind `--leak-check=full`: full engine test suite (156 checks, incl. 2-hour file) and the preview stress test | 0 bytes in use at exit, 0 errors (1.2 million allocations in the stress test, all freed) |
+| Uninitialised memory / invalid frees | valgrind memcheck, also in CI on every change | 0 errors after the fix |
+| Data races | ThreadSanitizer stress run | only known false positives inside FFmpeg's own threading; none in CUTLAB's player state |
+| Decoder threads | player threads are joined on close; per-size thread limits; single-frame decodes share a budget | stress test: players opened/closed, half of them after 5 ms, with monitor frames and thumbnails running |
+| Hardware → software fallback | failure to open or to decode switches to software; crashes are contained in the `:hwprobe` process | emulator API 28 (MediaCodec unavailable → software) and API 34 (MediaCodec used; 4K 10-bit falls back) |
+| Several decoders at once | preview + 2 monitor decoders + thumbnails | stress test, emulator full-editor test |
+| Repeated open/close | 25 quick cycles on the emulators; hundreds in the stress test | no crash, no leak |
+| Corrupt/unsupported files | truncated, random bytes, AV1 without a decoder | clear error, app keeps running |
+| Android lifecycle | no Android surface is used (frames are Flutter images). When the app goes to the background the preview pauses, which also stops the audio device | widget test |
+
+## Diagnostics after an unexpected end
+
+- **Native crash:** the report is written by the crash handler at the moment of the crash, before the process ends.
+- **Java crash:** the report is written by the Java handler before the process ends.
+- **Killed without a signal handler** (e.g. Android ending the app for memory): the engine also appends every activity line straight to `engine-activity.log`. The next start keeps it as `engine-activity-previous.log`, and it appears in the report as "Engine activity of the previous run". Android 11+ adds its own record of the kill.
+- **Privacy:** engine messages never contain file names or paths, only "the video" or "the mp4 file". The report filter also removes paths, `content://`/`file://` URIs and media file names (shown as `<file>`) from anything else. Kept: codec, resolution, frame rate, decoder names, memory, device model. No video content is ever included.
+
+## Earlier investigation (0.4.1)
 
 **Report (owner, Nov 2026):** the Android APK closes itself when previewing a video.
 
@@ -39,7 +85,7 @@ The "tombstones" in these runs come from `cutlab_crash_report_tests`, which cras
 
 ## What is not proven
 
-- The exact cause on the owner's phone is **not confirmed**: no crash log from the phone was available. Excessive memory use is the most likely cause, a vendor hardware decoder the second. Both are fixed. If CUTLAB still closes, the next start shows a report (see below).
+- *(0.4.1, superseded above)* The exact cause was not confirmed then: no crash log from the phone was available.
 - Emulators use Google's software MediaCodec decoders. A phone's own hardware decoders (Qualcomm, MediaTek, Exynos…) were not run. The separate test process exists for exactly that reason.
 - The arm64 APK itself was not run: emulators in CI are x86_64. The same engine code and app code are built for both.
 
