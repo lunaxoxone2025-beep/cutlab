@@ -107,9 +107,19 @@ jobs:
           CUTLAB_TEST_OUT: ${{ runner.temp }}/export-out
         run: build/core/cutlab_export_tests --long-only
       - name: Check every exported file independently (ffprobe, full decode)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # A current FFmpeg 8.1 build (BtbN, the same series as the Windows check).
+          name=$(gh release view latest -R BtbN/FFmpeg-Builds --json assets --jq '.assets[].name' | grep -m1 -E 'n8\.1-latest-linux64-lgpl-[0-9.]+\.tar\.xz$')
+          gh release download latest -R BtbN/FFmpeg-Builds -p "$name" -D "${{ runner.temp }}"
+          mkdir -p "${{ runner.temp }}/ffcli" && tar -xf "${{ runner.temp }}/$name" -C "${{ runner.temp }}/ffcli" --strip-components=1
+          B="${{ runner.temp }}/ffcli/bin"
+          "$B/ffmpeg" -version | head -1
+          python3 scripts/verify_exports.py "${{ runner.temp }}/export-out" "$B/ffprobe" "$B/ffmpeg"
+          # How Ubuntu's older FFmpeg 6.1 copes with the same files (report only).
           sudo apt-get install -y ffmpeg
-          python3 scripts/verify_exports.py "${{ runner.temp }}/export-out"
+          python3 scripts/verify_exports.py --informational "${{ runner.temp }}/export-out"
       - id: realmedia
         uses: actions/cache@v4
         with:

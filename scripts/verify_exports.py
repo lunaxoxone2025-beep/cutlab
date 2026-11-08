@@ -19,9 +19,12 @@ import subprocess
 import sys
 from fractions import Fraction
 
-out_dir = sys.argv[1]
-ffprobe = sys.argv[2] if len(sys.argv) > 2 else "ffprobe"
-ffmpeg = sys.argv[3] if len(sys.argv) > 3 else "ffmpeg"
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+# --informational: report only (e.g. how an older FFmpeg copes), never fail.
+informational = "--informational" in sys.argv
+out_dir = args[0]
+ffprobe = args[1] if len(args) > 1 else "ffprobe"
+ffmpeg = args[2] if len(args) > 2 else "ffmpeg"
 
 rows = []
 failures = 0
@@ -65,15 +68,6 @@ for name, w, h, fps, frames, vcodec, acodec in entries:
     elif audio:
         problems.append("unexpected audio stream")
     decode = subprocess.run([ffmpeg, "-v", "error", "-i", path, "-map", "0", "-f", "null", "-"], capture_output=True, text=True)
-    if acodec == "opus" and "[opus" in decode.stderr and decode.returncode == 0:
-        # Older FFmpeg releases' own Opus parser rejects some packets that
-        # libopus 1.5 writes; the reference decoder (libopus, as used by
-        # browsers and VLC) decides.
-        ref = subprocess.run([ffmpeg, "-v", "error", "-c:a", "libopus", "-i", path, "-map", "0", "-f", "null", "-"],
-                             capture_output=True, text=True)
-        print(f"{name}: FFmpeg's built-in Opus decoder said: {decode.stderr.strip()[:300]}; "
-              f"reference libopus decoder: {'no errors' if ref.returncode == 0 and not ref.stderr.strip() else ref.stderr.strip()[:300]}")
-        decode = ref
     if decode.returncode != 0 or decode.stderr.strip():
         problems.append("decode errors: " + decode.stderr.strip()[:300])
         # Details for the log: the audio packets (size, time) at both ends.
@@ -95,5 +89,5 @@ print(text)
 summary = os.environ.get("GITHUB_STEP_SUMMARY")
 if summary:
     with open(summary, "a", encoding="utf-8") as f:
-        f.write("### Exported files, checked independently\n\n" + text)
-sys.exit(1 if failures else 0)
+        f.write(("### Older FFmpeg (informational)" if informational else "### Exported files, checked independently") + "\n\n" + text)
+sys.exit(1 if failures and not informational else 0)
