@@ -1,8 +1,11 @@
 name: Flutter builds
 
-# Builds the Flutter edition for Android and PC (Windows, Linux) and publishes
-# the installable files as a new release per build, "cutlab-<version>"
-# (personal use; earlier builds are never deleted).
+# Builds the Flutter edition for Android and PC (Windows, Linux) and keeps
+# the installable files privately (personal use, never published):
+#   - as workflow artifacts of each run (90 days), and
+#   - as a DRAFT release per build, "cutlab-<version>": drafts are visible
+#     only to the repository owner/collaborators, never to the public.
+# Earlier builds are never deleted.
 #
 # Platform folders are generated with `flutter create` at build time; custom
 # native code lives in apps/cutlab/platform_overlay/ and is copied on top.
@@ -117,6 +120,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-android
+          retention-days: 90
           path: apps/cutlab/CUTLAB.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -167,6 +171,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-windows-x64
+          retention-days: 90
           path: apps/cutlab/CUTLAB-windows-x64.zip
           if-no-files-found: error
 
@@ -207,11 +212,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cutlab-linux-x64
+          retention-days: 90
           path: apps/cutlab/CUTLAB-linux-x64.tar.gz
           if-no-files-found: error
 
   publish:
-    name: Publish a new release
+    name: Keep the build as a private draft release
     needs: [android, windows, linux]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -227,22 +233,23 @@ jobs:
         with:
           name: cutlab-android
           path: dist
-      - name: Publish as a new release (earlier builds are kept)
+      - name: Save as a private draft release (earlier builds are kept)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # Every build gets its own permanent pre-release "cutlab-<version>".
-          # Nothing is deleted or replaced: older builds (including the
-          # "dev" release, which holds 0.4.20) stay downloadable.
+          # Every build gets its own DRAFT release "cutlab-<version>": only the
+          # owner sees and downloads it (drafts are never public). Nothing is
+          # deleted or replaced: older builds (including the "dev" release,
+          # which holds 0.4.20) stay available.
           ls -la dist
           TAG="cutlab-${BUILD_NAME}"
           if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG already exists: not touching it"; exit 0; fi
           cat > notes.md <<EOF
-          Development build **${BUILD_NAME}** from commit ${GITHUB_SHA::7}. Earlier builds stay available on the Releases page.
+          Private development build **${BUILD_NAME}** from commit ${GITHUB_SHA::7} (draft: visible only to the owner). Earlier builds stay available.
 
           - **Android:** download \`CUTLAB.apk\` on the phone and install it. Newer builds install over older ones and keep your projects.
           - **Windows:** unzip \`CUTLAB-windows-x64.zip\` and run \`cutlab.exe\`.
           - **Linux:** extract \`CUTLAB-linux-x64.tar.gz\` and run \`./cutlab\`.
           EOF
-          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --prerelease --title "CUTLAB ${BUILD_NAME}" --notes-file notes.md
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --draft --title "CUTLAB ${BUILD_NAME}" --notes-file notes.md

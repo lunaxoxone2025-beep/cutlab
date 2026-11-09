@@ -7,7 +7,7 @@ Status: **Phase 3 (media engine)** — November 2026. This document records the 
 | Item | What it is | Verdict |
 |---|---|---|
 | `apps/web/` (was the repo root) | **CutLab Lite** — a working browser editor: HTML + CSS + one ~1,300-line `app.js`. Single main track, text and audio lanes, trim/split/reorder, speed, filters, 8 transitions, Ken Burns, animated text, undo/redo, IndexedDB autosave, PWA, real-time export through `MediaRecorder`. | **Kept and shipped** as the installable app until the Flutter edition reaches parity (Phase 6). Bug fixes only. |
-| `.github/workflows/lite-apk.yml` | Wraps CutLab Lite with Capacitor and publishes `CutLab.apk` to Releases. | Kept, now scoped to `apps/web/**` changes. |
+| `.github/workflows/lite-apk.yml` | Wraps CutLab Lite with Capacitor and keeps `CutLab.apk` as a private draft release. | Kept, now scoped to `apps/web/**` changes. |
 | `android-signing/cutlab.keystore` | Fixed key that signs the Lite APK so updates install over each other. | **Risk** — see §9. |
 
 What Lite proves and what is reused: the interaction model (centered playhead, bottom tool bar, sheet panels), the visual identity (colours and spacing are now design tokens in `apps/cutlab/lib/src/theme.dart`), the effect/transition/text-style catalogue, and the project concepts (clips with in/out/speed, text overlays, audio with fades) that map directly onto the `.cutlab` model.
@@ -72,7 +72,7 @@ What Lite cannot become, and why a new engine is needed:
 
 **D13 — Generated platform folders + overlay.** `apps/cutlab/{android,linux,windows}` are generated in CI with `flutter create`; custom native code lives in `apps/cutlab/platform_overlay/<platform>/` and is copied on top (Phase 2: Android `MainActivity.kt` with the media channel). This keeps template noise out of the repository; folders may be committed in full if the overlay grows too large.
 
-**D14 — Personal use only (decided 2026-11-08).** CUTLAB is built for one user on Android and Windows/Linux PCs. No public releases, store listings or community distribution. Consequences: macOS builds are dropped; installable builds go to a rolling **`dev`** pre-release in the (private) repository; the license question and release signing are out of scope; the Lite signing key stays as is (postponed by the owner).
+**D14 — Personal use only (decided 2026-11-08).** CUTLAB is built for one user on Android and Windows/Linux PCs. No public releases, store listings or community distribution. Consequences: macOS builds are dropped; the repository is private and installable builds are kept privately (draft releases visible only to the owner, plus workflow artifacts; 2026-11-09); GitHub Pages is not used; the license question and release signing are out of scope; the Lite signing key stays as is (postponed by the owner).
 
 **D15 — Media references on Android are persistable SAF URIs.** Files are opened with `ACTION_OPEN_DOCUMENT` and kept as `content://` URIs with a persistable read grant, so multi-GB recordings are never copied into app storage. Probing (duration, size, rotation-corrected dimensions) and thumbnails use `MediaMetadataRetriever` until the Phase 3 engine replaces them. On PC, media is referenced by absolute path and marked `needsProbe` until the engine reads it.
 

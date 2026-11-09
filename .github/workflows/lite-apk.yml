@@ -1,7 +1,8 @@
 name: CutLab Lite APK
 
 # CutLab Lite = the current browser-based editor (apps/web) wrapped with Capacitor.
-# Whenever apps/web changes on main, GitHub builds the APK and publishes it in Releases.
+# Whenever apps/web changes on main, GitHub builds the APK and keeps it as a private DRAFT release
+# (visible only to the owner; never published).
 # It stays the installable app until the Flutter edition reaches feature parity (see docs/ROADMAP.md).
 on:
   push:
@@ -70,12 +71,13 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/CutLab.apk"
 
-      - name: Publicar en Releases
+      - name: Guardar como release borrador privado
         uses: softprops/action-gh-release@v2
         with:
           tag_name: lite-v${{ env.VERSION }}
           name: CutLab Lite v${{ env.VERSION }}
-          make_latest: true
+          draft: true
+          make_latest: false
           files: CutLab.apk
           body: |
             ## CutLab — editor de vídeo estilo CapCut 🎬

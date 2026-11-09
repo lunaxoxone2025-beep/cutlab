@@ -75,14 +75,14 @@ Serve `apps/web/` over HTTP(S) (service workers need HTTPS or `localhost`):
 python3 -m http.server -d apps/web 8080
 ```
 
-The Android APK is built by `.github/workflows/lite-apk.yml` (Capacitor 6 + `@capacitor/filesystem` + `@capacitor/share`) and published to Releases as `CutLab.apk`.
+The Android APK is built by `.github/workflows/lite-apk.yml` (Capacitor 6 + `@capacitor/filesystem` + `@capacitor/share`) and kept as a private **draft** release `lite-v<version>` with `CutLab.apk` (visible only to the owner).
 
 ## Continuous integration
 
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | every push / PR | hygiene, Lite JS checks, generated test media, C++ core + media engine tests on Linux and Windows, Dart format/analyze/test, Flutter analyze/test |
-| `flutter-build.yml` | changes to `apps/cutlab`, `packages`, `core`, `scripts` | FFmpeg + engine + app for Android (arm64 APK), Windows x64 and Linux x64, published to the rolling **`dev`** release |
+| `flutter-build.yml` | changes to `apps/cutlab`, `packages`, `core`, `scripts` | FFmpeg + engine + app for Android (arm64 APK), Windows x64 and Linux x64, kept privately: workflow artifacts (90 days) and a **draft** release `cutlab-<version>` per build (owner only; never published) |
 | `lite-apk.yml` | changes to `apps/web` | builds `CutLab.apk` (Lite) and publishes a GitHub Release |
 | `dart-format.yml` | pushes with `.dart` changes | formats Dart code and commits the result |
 

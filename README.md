@@ -5,15 +5,15 @@ Personal video editor for Android and PC (Windows/Linux) — approachable like a
 [![CI](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/ci.yml)
 [![Flutter builds](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml/badge.svg)](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml)
 
-## Install
+## Install (private: sign in to GitHub as the owner)
 
-| | **CUTLAB** (new, in development) | **CutLab Lite** (current everyday editor) |
-|---|---|---|
-| Android | [`CUTLAB.apk`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB.apk) | [`CutLab.apk`](https://github.com/lunaxoxone2025-beep/cutlab/releases/latest/download/CutLab.apk) |
-| Windows | [`CUTLAB-windows-x64.zip`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB-windows-x64.zip) → unzip → `cutlab.exe` | — |
-| Linux | [`CUTLAB-linux-x64.tar.gz`](https://github.com/lunaxoxone2025-beep/cutlab/releases/download/dev/CUTLAB-linux-x64.tar.gz) | — |
+The repository and every build are private. New builds are never published:
 
-Both Android apps can be installed side by side. Newer builds install over older ones and keep projects. If the repository is private, open the links while signed in to GitHub.
+- **Latest builds:** [Releases](https://github.com/lunaxoxone2025-beep/cutlab/releases) — each build is a **draft** `cutlab-<version>` (CUTLAB) or `lite-v<version>` (CutLab Lite), visible only to the owner. Open the newest draft and download `CUTLAB.apk`, `CUTLAB-windows-x64.zip` (unzip → `cutlab.exe`) or `CUTLAB-linux-x64.tar.gz`.
+- **Also:** [Actions → Flutter builds](https://github.com/lunaxoxone2025-beep/cutlab/actions/workflows/flutter-build.yml) → a run → *Artifacts* (`cutlab-android`, `cutlab-windows-x64`, `cutlab-linux-x64`; kept 90 days).
+- **Earlier builds** stay where they were, e.g. 0.4.20 in the [`dev`](https://github.com/lunaxoxone2025-beep/cutlab/releases/tag/dev) release and `cutlab-0.4.21` … `cutlab-0.7.56`.
+
+Both Android apps can be installed side by side. Newer builds install over older ones and keep projects.
 
 ## Status
 
