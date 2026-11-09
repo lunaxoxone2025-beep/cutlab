@@ -507,11 +507,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                               : _side == _Side.effects
                                   ? _Panel(title: 'Effects', child: EffectsPanel(controller: c, state: _tl, actions: _actions))
                                   : ListenableBuilder(
-                                  listenable: _tl,
-                                  builder: (context, _) => _tl.selection.isEmpty
-                                      ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))
-                                      : _Panel(title: 'Clip', child: ClipInspector(controller: c, state: _tl, actions: _actions)),
-                                ),
+                                      listenable: _tl,
+                                      builder: (context, _) => _tl.selection.isEmpty
+                                          ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))
+                                          : _Panel(title: 'Clip', child: ClipInspector(controller: c, state: _tl, actions: _actions)),
+                                    ),
                         ),
                       ],
                     ),

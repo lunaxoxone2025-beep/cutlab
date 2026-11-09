@@ -417,7 +417,8 @@ extension TimelineEdits on Project {
           fadeInTicks: g.clip.fadeInTicks.clamp(0, g.clip.durationTicks - d),
           fadeOutTicks: g.clip.fadeOutTicks.clamp(0, g.clip.durationTicks - d),
           videoFadeInTicks: g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks - d),
-          videoFadeOutTicks: (g.clip.videoFadeOutTicks).clamp(0, g.clip.durationTicks - d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks - d)),
+          videoFadeOutTicks:
+              (g.clip.videoFadeOutTicks).clamp(0, g.clip.durationTicks - d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks - d)),
         ),
     });
   }
@@ -459,7 +460,8 @@ extension TimelineEdits on Project {
           fadeInTicks: g.clip.fadeInTicks.clamp(0, g.clip.durationTicks + d),
           fadeOutTicks: g.clip.fadeOutTicks.clamp(0, g.clip.durationTicks + d),
           videoFadeInTicks: g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks + d),
-          videoFadeOutTicks: g.clip.videoFadeOutTicks.clamp(0, g.clip.durationTicks + d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks + d)),
+          videoFadeOutTicks:
+              g.clip.videoFadeOutTicks.clamp(0, g.clip.durationTicks + d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks + d)),
         ),
     });
   }
@@ -783,7 +785,12 @@ extension TimelineEdits on Project {
 
   Project removeEffect(String clipId, String effectId) {
     final pc = _visualClip(clipId);
-    return _replaceClips({clipId: pc.clip.copyWith(effects: [for (final e in pc.clip.effects) if (e.id != effectId) e])});
+    return _replaceClips({
+      clipId: pc.clip.copyWith(effects: [
+        for (final e in pc.clip.effects)
+          if (e.id != effectId) e
+      ])
+    });
   }
 
   /// Moves an effect to [newIndex] in the stack (effects apply top to bottom).
@@ -877,7 +884,8 @@ extension TimelineEdits on Project {
     var d = quantize(transition.durationTicks);
     if (d < 2 * frameTicks) d = 2 * frameTicks;
     if (d > max) d = quantizeDown(max);
-    return _replaceClips({clipId: pc.clip.copyWith(transitionIn: Transition(type: spec.type, durationTicks: d, direction: transition.direction))});
+    return _replaceClips(
+        {clipId: pc.clip.copyWith(transitionIn: Transition(type: spec.type, durationTicks: d, direction: transition.direction))});
   }
 
   // --------------------------------------------------------------- tracks

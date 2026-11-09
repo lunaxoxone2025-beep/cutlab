@@ -61,7 +61,9 @@ TimelinePlan buildTimelinePlan(Project p, Map<String, String> engineUris, {requi
       for (final e in c.effects) {
         if (!effectRenders(e)) continue;
         final spec = effectSpec(e.type)!;
-        styling.writeln('effect ${_token(c.id)} ${e.type} ${[for (final prm in spec.params) '${prm.name}=${effectParam(e, prm.name).toStringAsFixed(6)}'].join(',')}');
+        styling.writeln('effect ${_token(c.id)} ${e.type} ${[
+          for (final prm in spec.params) '${prm.name}=${effectParam(e, prm.name).toStringAsFixed(6)}'
+        ].join(',')}');
       }
       if (c.videoFadeInTicks > 0 || c.videoFadeOutTicks > 0) {
         styling.writeln('vfade ${_token(c.id)} ${c.videoFadeInTicks} ${c.videoFadeOutTicks}');

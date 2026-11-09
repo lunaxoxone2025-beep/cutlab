@@ -171,7 +171,9 @@ class TimelineActions {
       final c = p.find(pc.clip.id)!.clip;
       final e = c.effects.where((e) => e.type == type).firstOrNull;
       if (e != null) return p.updateEffect(c.id, e.id, params: {param: value}, enabled: true);
-      return p.addEffects(c.id, [newEffect(type, controller.newId(), params: {param: value})]);
+      return p.addEffects(c.id, [
+        newEffect(type, controller.newId(), params: {param: value})
+      ]);
     }, commit);
   }
 

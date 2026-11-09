@@ -87,7 +87,8 @@ class EngineBindings {
             'cutlab_export_encoders'),
         renderFrame = lib.lookupFunction<Int32 Function(Pointer<Utf8>, Int64, Int32, Int32, Pointer<Uint8>, Int64),
             int Function(Pointer<Utf8>, int, int, int, Pointer<Uint8>, int)>('cutlab_render_frame'),
-        effectCatalog = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_effect_catalog');
+        effectCatalog =
+            lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_effect_catalog');
 
   final Pointer<Utf8> Function() lastError;
   final void Function(Pointer<Void>) free;

@@ -261,11 +261,23 @@ class TimelinePainter extends CustomPainter {
     final h = rect.height * 0.45;
     if (c.videoFadeInTicks > 0) {
       final w = c.videoFadeInTicks / ticksPerSecond * state.pxPerSec;
-      canvas.drawPath(Path()..moveTo(rect.left, rect.top)..lineTo(rect.left + w, rect.top)..lineTo(rect.left, rect.top + h)..close(), paint);
+      canvas.drawPath(
+          Path()
+            ..moveTo(rect.left, rect.top)
+            ..lineTo(rect.left + w, rect.top)
+            ..lineTo(rect.left, rect.top + h)
+            ..close(),
+          paint);
     }
     if (c.videoFadeOutTicks > 0) {
       final w = c.videoFadeOutTicks / ticksPerSecond * state.pxPerSec;
-      canvas.drawPath(Path()..moveTo(rect.right, rect.top)..lineTo(rect.right - w, rect.top)..lineTo(rect.right, rect.top + h)..close(), paint);
+      canvas.drawPath(
+          Path()
+            ..moveTo(rect.right, rect.top)
+            ..lineTo(rect.right - w, rect.top)
+            ..lineTo(rect.right, rect.top + h)
+            ..close(),
+          paint);
     }
   }
 

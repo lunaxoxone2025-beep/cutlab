@@ -171,7 +171,8 @@ class _LiveSliderState extends State<_LiveSlider> {
       children: [
         Row(children: [
           Expanded(child: Text(widget.label, style: const TextStyle(fontSize: 12))),
-          Text(widget.format(_v), style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted, fontFeatures: [FontFeature.tabularFigures()])),
+          Text(widget.format(_v),
+              style: const TextStyle(fontSize: 12, color: CutlabColors.textMuted, fontFeatures: [FontFeature.tabularFigures()])),
         ]),
         SizedBox(
           height: 32,
@@ -270,7 +271,8 @@ class _Stack extends StatelessWidget {
         if (effects.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: CutlabSpacing.sm),
-            child: Text('No effects. Pick a look above or add effects with +.', style: TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
+            child:
+                Text('No effects. Pick a look above or add effects with +.', style: TextStyle(fontSize: 12, color: CutlabColors.textMuted)),
           ),
         for (var i = 0; i < effects.length; i++)
           _EffectCard(key: ValueKey('fx-${effects[i].id}'), effect: effects[i], index: i, count: effects.length, actions: actions),
@@ -476,7 +478,9 @@ class _TransitionEditor extends StatelessWidget {
     final fps = project.fps;
     final minD = 2 * project.frameTicks;
     final maxD = max > minD ? max : minD;
-    String text(int t) => advanced ? '${formatTimecode(t, fps)} (${(t / project.frameTicks).round()} frames)' : '${(t / ticksPerSecond).toStringAsFixed(2)} s';
+    String text(int t) => advanced
+        ? '${formatTimecode(t, fps)} (${(t / project.frameTicks).round()} frames)'
+        : '${(t / ticksPerSecond).toStringAsFixed(2)} s';
     final duration = tr?.durationTicks ?? ticksPerSecond;
     final t = tr ?? Transition(type: type, durationTicks: duration);
     return Column(
@@ -486,7 +490,11 @@ class _TransitionEditor extends StatelessWidget {
           spacing: CutlabSpacing.xs,
           runSpacing: CutlabSpacing.xs,
           children: [
-            ChoiceChip(key: const Key('trNone'), label: const Text('None'), selected: current == null, onSelected: (_) => actions.setTransition(null)),
+            ChoiceChip(
+                key: const Key('trNone'),
+                label: const Text('None'),
+                selected: current == null,
+                onSelected: (_) => actions.setTransition(null)),
             for (final s in transitionCatalog)
               ChoiceChip(
                 key: Key('trType-${s.type}'),
@@ -547,7 +555,9 @@ class _TransitionEditor extends StatelessWidget {
           else
             const Text('Does not play: no media beyond the cut for this type. Trim the clips or choose a dip.',
                 key: Key('trInactive'), style: TextStyle(fontSize: 11, color: CutlabColors.danger)),
-          if (advanced) const Text('Tip: drag the ends of the transition on the timeline.', style: TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
+          if (advanced)
+            const Text('Tip: drag the ends of the transition on the timeline.',
+                style: TextStyle(fontSize: 11, color: CutlabColors.textMuted)),
         ],
       ],
     );

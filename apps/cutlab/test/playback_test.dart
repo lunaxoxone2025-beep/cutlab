@@ -98,19 +98,24 @@ void main() {
       // c2 follows c1 directly on v1: a dissolve across the cut.
       p = p.copyWith(media: [
         for (final m in p.media)
-          if (m.id == 'mute') MediaRef(id: 'mute', kind: MediaKind.video, uri: m.uri, displayName: m.displayName, durationTicks: 60 * tps) else m,
+          if (m.id == 'mute')
+            MediaRef(id: 'mute', kind: MediaKind.video, uri: m.uri, displayName: m.displayName, durationTicks: 60 * tps)
+          else
+            m,
       ]);
       p = p.copyWith(tracks: [
         for (final t in p.tracks)
-          if (t.id == 'v1')
-            t.copyWith(clips: [t.clips[0], t.clips[1].copyWith(sourceInTicks: 20 * tps)])
-          else
-            t,
+          if (t.id == 'v1') t.copyWith(clips: [t.clips[0], t.clips[1].copyWith(sourceInTicks: 20 * tps)]) else t,
       ]);
-      p = p.addEffects('c1', [newEffect('brightness', next(), params: {'amount': 0.25}), newEffect('vignette', next())]);
+      p = p.addEffects('c1', [
+        newEffect('brightness', next(), params: {'amount': 0.25}),
+        newEffect('vignette', next())
+      ]);
       p = p.addEffects('c1', [newEffect('sepia', next())]);
       p = p.updateEffect('c1', 'x3', enabled: false);
-      p = p.addEffects('c1', [const Effect(id: 'old', type: 'color.basic', params: {'brightness': 0.1})]);
+      p = p.addEffects('c1', [
+        const Effect(id: 'old', type: 'color.basic', params: {'brightness': 0.1})
+      ]);
       p = p.setVideoFades('c2', fadeOutTicks: tps);
       p = p.setTransition('c2', const Transition(type: 'wipe', durationTicks: tps, direction: 'up'));
       return p;
@@ -122,10 +127,13 @@ void main() {
       expect(lines, contains('canvas 1920 1080'));
       expect(lines, contains('fps 30 1'));
       final fx = lines.where((l) => l.startsWith('effect ')).toList();
-      expect(fx, [
-        'effect c1 brightness amount=0.250000',
-        'effect c1 vignette amount=0.500000,size=0.750000,softness=0.450000',
-      ], reason: 'disabled and unknown effects are left out; defaults are written out');
+      expect(
+          fx,
+          [
+            'effect c1 brightness amount=0.250000',
+            'effect c1 vignette amount=0.500000,size=0.750000,softness=0.450000',
+          ],
+          reason: 'disabled and unknown effects are left out; defaults are written out');
       expect(lines, contains('vfade c2 0 $tps'));
       expect(lines, contains('transition c2 wipe ${tps ~/ 2} ${tps ~/ 2} up'));
       // Effect and transition lines come after every clip (they name clips).

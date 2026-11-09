@@ -38,7 +38,8 @@ class AppSettings {
   int get previewMaxWidth => previewHeight * 16 ~/ 9;
   int get previewMaxHeight => previewHeight * 16 ~/ 9;
 
-  AppSettings copyWith({EditorMode? defaultMode, int? autosaveSeconds, int? previewHeight, bool? hardwareDecoding, bool? fastEffectsPreview}) =>
+  AppSettings copyWith(
+          {EditorMode? defaultMode, int? autosaveSeconds, int? previewHeight, bool? hardwareDecoding, bool? fastEffectsPreview}) =>
       AppSettings(
         defaultMode: defaultMode ?? this.defaultMode,
         autosaveSeconds: autosaveSeconds ?? this.autosaveSeconds,
