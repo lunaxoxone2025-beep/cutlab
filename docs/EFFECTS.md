@@ -82,15 +82,49 @@ Clips without effects, fades or transitions are exported straight from the decod
 - Desktop: *Effects* tab next to Inspector and Mixer. Phone: the wand button (Effects) in the timeline toolbar opens the effects sheet; tapping a transition opens it too.
 - Every change is one undo step; slider drags are rendered live and undo as one step. Everything is saved in the `.cutlab` file (format v4, `docs/PROJECT_FORMAT.md`).
 
-## Performance (measured)
+## Performance (measured in CI, CPU only)
 
-See the measurements section added at the end of Phase 7 below.
+All figures are from CI machines and Android emulators — **not** from the owner's phone or PC — at commit `5b47e86`. Effect math runs on the CPU with a shared worker pool (4 workers on the Linux and Windows runners, 2 on the emulators).
+
+**Effect cost per frame** (`cutlab_bench_effects`, ms; Linux runner / Windows runner):
+
+| | 1080p | 1440p | 4K |
+|---|---|---|---|
+| Brightness + contrast (one table) | 2.5 / 2.3 | 4.5 / 4.1 | 9.7 / 9.4 |
+| Exposure, gamma, temperature, tint, highlights, shadows, RGB together (one table) | 2.5 / 2.3 | 4.6 / 4.0 | 9.9 / 9.2 |
+| Saturation (also grayscale, sepia) | 5.4 / 5.1 | 9.9 / 9.0 | 21.6 / 21.1 |
+| Vibrance | 9.8 / 10.9 | 18.1 / 19.3 | 39.0 / 43.4 |
+| Vignette | 1.9 / 1.8 | 3.7 / 3.1 | 7.5 / 7.0 |
+| Colour filter (teal & orange) | 16.7 / 17.8 | 29.5 / 31.8 | 65.1 / 70.9 |
+| Cinematic chain (exposure, contrast, vibrance, filter, vignette) | 18.1 / 19.5 | 31.8 / 34.3 | 70.2 / 77.0 |
+| Blur (default radius) | 19.8 / 19.9 | 25.0 / 25.0 | 48.1 / 52.2 |
+| Sharpen (default) | 34.5 / 33.6 | 62.8 / 60.1 | 142.7 / 134.4 |
+| Transition: dissolve / wipe / slide | 5.3 / 5.9 / 0.8 | 9.6 / 10.7 / 1.7 | 21.9 / 23.2 / 3.7 |
+| Transition: zoom in / smooth blur | 15.5 / 26.4 | 27.9 / 46.8 | 60.8 / 103.7 |
+| Fade / dip | 3.9 | 6.9 | 15.5 |
+
+A long chain of colour effects costs about the same as one filter (the chain is baked into one colour cube).
+
+**Exports** (software H.264, real-size test recordings; a cinematic look on both clips and a 1 s dissolve vs the same timeline plain):
+
+| | Linux runner | Android 9 emulator | Android 14 emulator |
+|---|---|---|---|
+| 1080p60 | 27.9 fps (0.46× real time) vs 98.3 plain | 21.5 vs 88.2 | 16.1 vs 77.2 |
+| 1440p60 | 14.8 fps (0.25×) vs 48.7 | 11.6 vs 44.6 | 10.4 vs 38.2 |
+| 4K30 (HEVC 10-bit source) | 5.8 fps (0.19×) vs 18.4 | 4.6 vs 17.6 | 4.1 vs 13.4 |
+| 2-hour timeline with effects and 21 transitions (192×108, 24 fps) | 144 s for 172,800 frames | — | — |
+
+Only clips with effects, fades or transitions take the composing path; the rest of a timeline exports at the plain speed.
+
+**Preview** (1080p60 recording with the look and a dissolve, 720p preview): Linux runner 56 fps shown, 18 of 318 frames skipped, pictures 5.6 ms late on average; Android 9 emulator 50 fps (43 skipped, 26 ms late); Android 14 emulator 40 fps (103 skipped, 37 ms late). When composing cannot keep up, the preview skips to the frame due instead of drifting from the sound (sync is kept, smoothness drops). On such machines, *Fast effects preview* or a lower preview quality helps; the export is unaffected.
+
+**Memory:** composing adds the output-size canvases (8 MB at 1080p, 33 MB at 4K, two more during a transition) and a 30 KB colour cube per effect list. A 2-hour timeline played across its transitions and sought 40 times rose to about 160 MB RSS in the test process, about the same as the same timeline without effects (demuxer indexes and decoders of the 2-hour file); valgrind reports no leaks or memory errors.
 
 ## Tests
 
 | Test | What |
 |---|---|
-| `core/tests/test_effects.cpp` | Every effect checked on a test picture (gray ramp, orange and blue areas) against the untouched picture at known places; defaults neutral; out-of-range values clamped; unknown effects/parameters rejected; effect order; effects per clip; size independence; video fades; every transition and direction at known progress; continuity at 24/29.97/30/60/120 fps on frame-numbered clips (each output frame = the source frame due, none black); preview picture = composed picture; audio RMS across cross-fades and dips; exported files decoded and compared with the composed picture (and with the plain picture), at 24/30/60 fps; sound in an exported cross-fade; a 2-hour timeline with 22 transitions (random positions, preview playback across the 1-hour transition, seeks, memory), and in CI a full 2-hour export of it. Linux, Windows, Android emulators, valgrind. |
+| `core/tests/test_effects.cpp` | Every effect checked on a test picture (gray ramp, orange and blue areas) against the untouched picture at known places; defaults neutral; out-of-range values clamped; unknown effects/parameters rejected; effect order; effects per clip; size independence; video fades; every transition and direction at known progress; continuity at 24/29.97/30/60/120 fps on frame-numbered clips (each output frame = the source frame due, none black); preview picture = composed picture; audio RMS across cross-fades and dips; exported files decoded and compared with the composed picture (and with the plain picture), at 24/30/60 fps; sound in an exported cross-fade; a 2-hour timeline with 21 transitions (random positions, preview playback across the 1-hour transition, seeks, memory), and in CI a full 2-hour export of it. Linux, Windows, Android emulators, valgrind. |
 | `core/tests/bench_effects.cpp` | Effect and transition cost per frame at 1080p, 1440p and 4K. |
 | `packages/project_format/test/effects_test.dart` | The Dart catalogue equals the engine's (read from `effects.cpp`); add/edit/enable/reorder/remove; looks; copy; split; unknown effects kept; video fades; transition rules, limits and handles; v3 files open. |
 | `apps/cutlab/test/playback_test.dart` | Plan lines for effects, fades and transitions; undo/redo; save/reload gives the same plan. |
@@ -107,6 +141,6 @@ See the measurements section added at the end of Phase 7 below.
 | Transitions between tracks | Only between adjacent clips on the same picture track; picture-in-picture and blend modes are not available. |
 | Clip speed | Clips with a speed other than 1 (not editable yet) get no overlap transitions. |
 | Bit depth | 10-bit and HDR sources are composed in 8 bits (SDR); clips without effects keep the Phase 6 path. |
-| Preview of very heavy stacks | On slow devices, several spatial effects (blur, sharpen) at 1080p preview can drop frames; use Fast effects preview. |
+| Speed | Composing is CPU work: with a full look, exports run below real time on the CI machines (table above) and the preview skips frames on the emulators. Real phones and PCs with more cores should do better, but this is not measured yet. |
 | Device testing | Measured on CI machines and Android emulators only; not yet tried on the owner's phone and PC. |
 | Phase 6 hardware encoders | Still **not validated on physical devices** (see `docs/EXPORT.md`). CI runs the software encoders and the emulators' MediaCodec; real-phone and real-GPU encoder speed and behaviour remain unverified. |
