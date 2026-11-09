@@ -546,12 +546,11 @@ void box_pass(Rgba img, int x0, int y0, int w, int h, int r, uint8_t* tmp) {
     }
   });
   // Vertical: tmp -> img, in bands of columns (running sums per column).
-  constexpr int band = kBlurBand;
-  const int bands = (w + band - 1) / band;
+  const int bands = (w + kBlurBand - 1) / kBlurBand;
   WorkPool::shared().parallel(bands, [&](int b, int e) {
-    uint32_t sum[band * 4];
+    uint32_t sum[kBlurBand * 4];
     for (int bi = b; bi < e; ++bi) {
-      const int xa = bi * band, n = std::min(w, xa + band) - xa;
+      const int xa = bi * kBlurBand, n = std::min(w, xa + kBlurBand) - xa;
       std::fill(sum, sum + n * 4, 0u);
       for (int k = -r; k <= r; ++k) {
         const uint8_t* row = tmp + static_cast<size_t>(std::clamp(k, 0, h - 1)) * w * 4 + xa * 4;
