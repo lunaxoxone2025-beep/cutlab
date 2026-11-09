@@ -52,7 +52,7 @@ Future<void> openProject(WidgetTester tester, AppServices services, Size size) a
   addTearDown(tester.view.reset);
   await tester.pumpWidget(CutlabApp(services: services));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('FX'));
+  await tapIn(tester, find.text('FX'));
   await tester.pumpAndSettle();
 }
 
@@ -70,6 +70,19 @@ Future<void> show(WidgetTester tester, Key key) async {
   await tester.scrollUntilVisible(inPanel(key), 150,
       scrollable: find.descendant(of: find.byKey(const Key('fxPanel')), matching: find.byType(Scrollable)).first);
   await tester.pumpAndSettle();
+}
+
+/// Scrolls [f] into view (toolbars and panels scroll on small screens), then taps it.
+Future<void> tapIn(WidgetTester tester, Finder f) async {
+  await tester.ensureVisible(f);
+  await tester.pumpAndSettle();
+  await tester.tap(f);
+}
+
+Future<void> dragIn(WidgetTester tester, Finder f, Offset by) async {
+  await tester.ensureVisible(f);
+  await tester.pumpAndSettle();
+  await tester.drag(f, by);
 }
 
 Future<void> undo(WidgetTester tester) async {
@@ -95,12 +108,12 @@ void main() {
     final tl = engine.timelines.single;
 
     await tapClip(tester, 7);
-    await tester.tap(find.byKey(const Key('tlEffects')));
+    await tapIn(tester, find.byKey(const Key('tlEffects')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('fxPanel')), findsOneWidget);
     expect(find.byKey(const Key('fxAdd')), findsNothing, reason: 'the full stack is an advanced tool');
 
-    await tester.tap(inPanel(const Key('look-cinematic')));
+    await tapIn(tester, inPanel(const Key('look-cinematic')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, contains('effect cb filter '));
@@ -109,7 +122,7 @@ void main() {
 
     // A quick slider adds its effect; the whole drag is one undo step.
     final slider = find.descendant(of: inPanel(const Key('quick-brightness')), matching: find.byType(Slider));
-    await tester.drag(slider, const Offset(60, 0));
+    await dragIn(tester, slider, const Offset(60, 0));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, contains('effect cb brightness amount=0.'));
@@ -123,10 +136,10 @@ void main() {
 
     // Fade from black and a dip to black from the clip before.
     await show(tester, const Key('trType-dip_black'));
-    await tester.tap(inPanel(const Key('trType-dip_black')));
+    await tapIn(tester, inPanel(const Key('trType-dip_black')));
     await tester.pumpAndSettle();
     await show(tester, const Key('trDur-500'));
-    await tester.tap(inPanel(const Key('trDur-500')));
+    await tapIn(tester, inPanel(const Key('trDur-500')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, contains('transition cb dip_black ${tps ~/ 4} ${tps ~/ 4} left'));
@@ -134,7 +147,7 @@ void main() {
 
     // The first clip has no clip before it.
     await tapClip(tester, 2);
-    await tester.tap(find.byKey(const Key('tlEffects')));
+    await tapIn(tester, find.byKey(const Key('tlEffects')));
     await tester.pumpAndSettle();
     await show(tester, const Key('trNoCut'));
     expect(inPanel(const Key('trNoCut')), findsOneWidget);
@@ -153,11 +166,11 @@ void main() {
     await openProject(tester, services, desktop);
     final tl = engine.timelines.single;
     await tapClip(tester, 7);
-    await tester.tap(find.byKey(const Key('tlEffects')));
+    await tapIn(tester, find.byKey(const Key('tlEffects')));
     await tester.pumpAndSettle();
 
     Future<void> add(String type) async {
-      await tester.tap(inPanel(const Key('fxAdd')));
+      await tapIn(tester, inPanel(const Key('fxAdd')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(Key('fxAddItem-$type')).last);
       await tester.pumpAndSettle();
@@ -171,37 +184,37 @@ void main() {
     expect(tl.plan, contains('effect cb sepia amount=1.000000\neffect cb blur radius=0.006000'));
     final ids = [for (final e in _current(tester).find('cb')!.clip.effects) e.id];
     // Off: no longer rendered.
-    await tester.tap(inPanel(Key('fxToggle-${ids[0]}')));
+    await tapIn(tester, inPanel(Key('fxToggle-${ids[0]}')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, isNot(contains('sepia')));
-    await tester.tap(inPanel(Key('fxToggle-${ids[0]}')));
+    await tapIn(tester, inPanel(Key('fxToggle-${ids[0]}')));
     // Blur first.
-    await tester.tap(inPanel(Key('fxUp-${ids[1]}')));
+    await tapIn(tester, inPanel(Key('fxUp-${ids[1]}')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, contains('effect cb blur radius=0.006000\neffect cb sepia'));
     // A parameter slider.
-    await tester.drag(find.descendant(of: inPanel(Key('fxParam-${ids[1]}-radius')), matching: find.byType(Slider)), const Offset(80, 0));
+    await dragIn(tester, find.descendant(of: inPanel(Key('fxParam-${ids[1]}-radius')), matching: find.byType(Slider)), const Offset(80, 0));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, isNot(contains('blur radius=0.006000')));
-    await tester.tap(inPanel(Key('fxRemove-${ids[0]}')));
+    await tapIn(tester, inPanel(Key('fxRemove-${ids[0]}')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, isNot(contains('sepia')));
 
     // Transition with direction, then timed with the slider.
     await show(tester, const Key('trType-slide'));
-    await tester.tap(inPanel(const Key('trType-slide')));
+    await tapIn(tester, inPanel(const Key('trType-slide')));
     await tester.pumpAndSettle();
     await show(tester, const Key('trDirection'));
-    await tester.tap(find.descendant(of: inPanel(const Key('trDirection')), matching: find.byIcon(Icons.arrow_upward)));
+    await tapIn(tester, find.descendant(of: inPanel(const Key('trDirection')), matching: find.byIcon(Icons.arrow_upward)));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(tl.plan, contains('transition cb slide ${tps ~/ 2} ${tps ~/ 2} up'));
     await show(tester, const Key('trDuration'));
-    await tester.drag(find.descendant(of: inPanel(const Key('trDuration')), matching: find.byType(Slider)), const Offset(100, 0));
+    await dragIn(tester, find.descendant(of: inPanel(const Key('trDuration')), matching: find.byType(Slider)), const Offset(100, 0));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     final tr = _current(tester).find('cb')!.clip.transitionIn!;
@@ -214,13 +227,13 @@ void main() {
     final (services, engine, _) = await setUpProject();
     await openProject(tester, services, phone);
     await tapClip(tester, 7);
-    await tester.tap(find.byKey(const Key('tlEffects')));
+    await tapIn(tester, find.byKey(const Key('tlEffects')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('fxPanel')), findsOneWidget);
-    await tester.tap(inPanel(const Key('look-noir')));
+    await tapIn(tester, inPanel(const Key('look-noir')));
     await tester.pumpAndSettle();
     await show(tester, const Key('trType-dissolve'));
-    await tester.tap(inPanel(const Key('trType-dissolve')));
+    await tapIn(tester, inPanel(const Key('trType-dissolve')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(engine.timelines.single.plan, contains('transition cb dissolve'));
@@ -240,9 +253,9 @@ void main() {
     await openProject(tester, services, desktop);
     final tl = engine.timelines.single;
     await tapClip(tester, 7);
-    await tester.tap(find.byKey(const Key('tlEffects')));
+    await tapIn(tester, find.byKey(const Key('tlEffects')));
     await tester.pumpAndSettle();
-    await tester.tap(inPanel(const Key('look-warm')));
+    await tapIn(tester, inPanel(const Key('look-warm')));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tl.plan, isNot(contains('preview ')));
     await services.updateSettings(services.settings.value.copyWith(fastEffectsPreview: true));

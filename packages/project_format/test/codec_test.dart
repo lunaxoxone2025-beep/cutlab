@@ -156,7 +156,7 @@ void main() {
     final p = v2.decode(jsonEncode(d));
     expect(p.name, 'Gameplay montage (migrated)');
     expect(p.markers.single.label, 'Triple kill');
-    expect(() => const ProjectCodec(targetVersion: 4).decode(jsonEncode(d)), throwsA(isA<ProjectFormatException>()));
+    expect(() => ProjectCodec(targetVersion: currentFormatVersion + 1).decode(jsonEncode(d)), throwsA(isA<ProjectFormatException>()));
   });
 
   test('media flags round trip and relinking keeps the id', () {
