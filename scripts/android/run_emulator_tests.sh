@@ -31,7 +31,7 @@ adb push "$NATIVE/." $D/ >/dev/null
 adb push "$MEDIA/test-media/." $D/media/ >/dev/null
 adb push "$MEDIA/android-media/." $D/real/ >/dev/null
 adb shell chmod 755 $D/cutlab_core_tests $D/cutlab_media_tests $D/cutlab_stress_preview $D/cutlab_crash_report_tests \
-  $D/cutlab_timeline_tests $D/cutlab_bench_timeline $D/cutlab_export_tests
+  $D/cutlab_timeline_tests $D/cutlab_bench_timeline $D/cutlab_export_tests $D/cutlab_effects_tests $D/cutlab_bench_effects
 native() {
   local name="$1"; shift
   echo "NATIVE-TEST $name: start" | tee -a "$LOGS/native.txt"
@@ -46,6 +46,8 @@ native timeline CUTLAB_TEST_MEDIA=$D/media ./cutlab_timeline_tests
 native bench ./cutlab_bench_timeline $D/media $D/real
 adb shell mkdir -p $D/out $D/bench-out
 native export CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/out ./cutlab_export_tests
+native effects CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/out ./cutlab_effects_tests
+native effects-bench ./cutlab_bench_effects 5
 native export-bench CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/bench-out ./cutlab_export_tests --bench $D/real
 adb pull $D/out "$LOGS/exports" >/dev/null 2>&1 || true
 adb shell rm -rf $D/bench-out
@@ -63,6 +65,8 @@ DEVICE=$(adb devices | awk 'NR==2 {print $1}')
 ( cd "$APP" && flutter test integration_test/timeline_playback_test.dart -d "$DEVICE" --reporter expanded ) 2>&1 | tee "$LOGS/flutter-playback.txt"
 [ "${PIPESTATUS[0]}" -eq 0 ] || status=1
 ( cd "$APP" && flutter test integration_test/export_test.dart -d "$DEVICE" --reporter expanded ) 2>&1 | tee "$LOGS/flutter-export.txt"
+[ "${PIPESTATUS[0]}" -eq 0 ] || status=1
+( cd "$APP" && flutter test integration_test/effects_test.dart -d "$DEVICE" --reporter expanded ) 2>&1 | tee "$LOGS/flutter-effects.txt"
 [ "${PIPESTATUS[0]}" -eq 0 ] || status=1
 
 sleep 2

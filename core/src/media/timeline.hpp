@@ -21,11 +21,27 @@
 
 #include "audio_decoder.hpp"
 #include "audio_output.hpp"
+#include "effects.hpp"
 #include "video_decoder.hpp"
 
 namespace cutlab::media {
 
 enum class TlKind { video, image, audio };
+class Compositor;
+
+/// A transition into a clip from the clip before it on the same track (the
+/// one ending exactly where this one starts). It runs over
+/// [start - left, start + right): overlapping kinds show the previous clip
+/// continuing past its end and this clip from before its start (media
+/// handles, checked by the app); dips fade the previous clip to a colour
+/// over `left` and this clip in over `right`.
+struct TlTransitionIn {
+  bool on = false;
+  TransitionKind kind = TransitionKind::dissolve;
+  Direction dir = Direction::left;
+  Ticks left = 0;
+  Ticks right = 0;
+};
 
 struct TlClip {
   std::string id;
@@ -38,7 +54,18 @@ struct TlClip {
   Ticks fade_out = 0;
   bool audio = false;  // the clip's sound is part of the mix
   bool still = false;  // a photo (one picture for the whole clip)
+  std::vector<TlEffect> effects;  // enabled effects, applied in order
+  Ticks vfade_in = 0;    // picture from black over the first vfade_in
+  Ticks vfade_out = 0;   // picture to black over the last vfade_out
+  TlTransitionIn tin;    // transition from the previous clip
+  // Set by TlPlan::parse from the transitions: how far the clip's picture
+  // and sound reach before its start / after its end (overlap transitions).
+  Ticks lead = 0;
+  Ticks tail = 0;
+  Ticks xfade_out_left = 0;  // audio cross-fade of the transition out
   Ticks end() const { return start + duration; }
+  /// True when this clip needs the compositor (effects or video fades).
+  bool styled() const { return !effects.empty() || vfade_in > 0 || vfade_out > 0; }
 };
 
 struct TlTrack {
@@ -72,6 +99,13 @@ struct TlPlan {
   bool hardware = false;  // hardware video decoding allowed
   Ticks duration = 0;     // end of the last clip (or overlay, or the "duration" line)
   std::vector<TlOverlay> overlays;  // export only; playback ignores them
+  int canvas_w = 0;  // project picture size (0 = not given: the preview uses the clip sizes)
+  int canvas_h = 0;
+  Rational fps{30, 1};       // project frame rate (preview of effects/transitions)
+  int preview_height = 0;    // preview quality: canvas height limit (0 = player default)
+  /// Any effect, video fade or transition: the picture goes through the
+  /// compositor (preview and export alike).
+  bool composite = false;
 
   /// Parses the text the app sends (see docs/PLAYBACK.md). Throws
   /// std::invalid_argument with the line number on malformed input.
@@ -222,6 +256,12 @@ class TimelinePlayer {
   std::vector<QFrame> video_next(const std::vector<TlSegment>& segs, const TlPlan& plan);
   std::vector<QFrame> enter_segment(const std::vector<TlSegment>& segs, const TlPlan& plan, size_t i);
   ActiveVideo& video_for(const TlClip& c, const TlPlan& plan);
+  // Composed timelines (effects, video fades, transitions): pictures drawn
+  // by the compositor on the project frame-rate grid, at preview size.
+  std::vector<QFrame> comp_seek(const TlPlan& plan, Ticks t);
+  std::vector<QFrame> comp_next(const TlPlan& plan);
+  QFrame comp_frame(Ticks t, bool black);
+  void comp_ensure(const TlPlan& plan);
   std::unique_ptr<VideoDecoder> open_video(const TlClip& c, const TlPlan& plan);
   static std::string video_key(const TlClip& c) { return c.id + '\n' + c.uri; }
   static Ticks to_timeline(const TlClip& c, Ticks src_pts) { return c.start + (src_pts - c.src_in); }
@@ -263,6 +303,9 @@ class TimelinePlayer {
   uint64_t current_serial_ = 0;
   size_t cur_seg_ = 0;  // video thread
   std::vector<ActiveVideo> active_;  // video thread
+  std::unique_ptr<Compositor> comp_;  // video thread
+  int64_t comp_n_ = 0;                // next grid frame
+  Ticks comp_last_push_ = 0;
   PreparedVideo prepared_;           // guarded by mu_
   std::string video_error_;
   std::string video_decoder_;

@@ -160,6 +160,19 @@ CUTLAB_API cutlab_status cutlab_timeline_stats(cutlab_timeline* t, char** out_js
 CUTLAB_API cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_ticks, int32_t frames, float* out, float* peaks,
                                                       int32_t peaks_capacity);
 
+/* --------------------------------------------------- effects / composing */
+
+/* Composes the picture of a timeline plan at `ticks` (effects, video fades,
+ * transitions; no titles) at width x height RGBA into dst (capacity >= w*h*4),
+ * exactly as the export does before encoding and the preview does at
+ * preview size. Independent of any player. For tests and checks. */
+CUTLAB_API cutlab_status cutlab_render_frame(const char* plan, int64_t ticks, int32_t width, int32_t height, uint8_t* dst, int64_t capacity);
+
+/* The effect types and their parameters as JSON:
+ * {"effects":[{"type","params":[{"name","min","max","default"}]}],
+ *  "looks":[...], "transitions":[...], "directions":[...]}. */
+CUTLAB_API cutlab_status cutlab_effect_catalog(char** out_json);
+
 /* ----------------------------------------------------------------- export
  *
  * Renders a timeline plan (the playback plan plus "duration" and title

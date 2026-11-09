@@ -41,6 +41,20 @@ q -f lavfi -i "sine=frequency=440:duration=3:sample_rate=44100" -c:a libmp3lame 
   q -f lavfi -i "sine=frequency=440:duration=3:sample_rate=44100" "$OUT/tone.wav"
 q -f lavfi -i "color=c=red:s=64x48" -frames:v 1 "$OUT/red.png"
 
+# Effects and transitions: a picture with a gray ramp (left half) and two
+# flat colours (right half), and two flat-colour clips with steady tones of
+# different pitch (audio continuity across cross-fades). Long enough for
+# transition handles.
+q -f lavfi -i "nullsrc=s=320x180:r=30,format=gbrp,geq=r='if(lt(X\,160)\,X*255/159\,if(lt(Y\,90)\,200\,40))':g='if(lt(X\,160)\,X*255/159\,if(lt(Y\,90)\,80\,90))':b='if(lt(X\,160)\,X*255/159\,if(lt(Y\,90)\,40\,200))',format=yuv420p" \
+  -t 4 -c:v libx264 -preset veryfast -crf 1 -g 30 "$OUT/colors.mp4"
+flat() { # r g b tone-hz name
+  q -f lavfi -i "color=c=0x$(printf '%02x%02x%02x' "$1" "$2" "$3"):s=320x180:r=30,format=yuv420p" \
+    -f lavfi -i "aevalsrc='0.4*sin(2*PI*$4*t)|0.4*sin(2*PI*$4*t)':s=48000:d=6" \
+    -t 6 -c:v libx264 -preset veryfast -crf 1 -g 30 -c:a pcm_s16le "$OUT/$5"
+}
+flat 220 60 60 500 flat_red.mkv
+flat 50 70 220 700 flat_blue.mkv
+
 # Mixer tests: tones of exactly known amplitude (0.5).
 q -f lavfi -i "aevalsrc='0.5*sin(2*PI*1000*t)|0.5*sin(2*PI*1000*t)':s=48000:d=6" -c:a pcm_s16le "$OUT/tone1k.wav"
 q -f lavfi -i "aevalsrc='0.5*sin(2*PI*440*t)':s=44100:d=6" -c:a aac -b:a 192k "$OUT/tone440.m4a"

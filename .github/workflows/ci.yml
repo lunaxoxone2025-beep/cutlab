@@ -114,6 +114,12 @@ jobs:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
           CUTLAB_TEST_OUT: ${{ runner.temp }}/export-out
         run: build/core/cutlab_export_tests --long-only
+      - name: Export a 2-hour timeline with effects and transitions
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/export-out
+          CUTLAB_FX_ONLY_LONG: 1
+        run: build/core/cutlab_effects_tests --long 2>/dev/null
       - name: Check every exported file independently (ffprobe, full decode)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,15 +151,18 @@ jobs:
           # Without zero-initialised locals, so valgrind still sees mistakes.
           cmake -S core -B build/core-vg -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCUTLAB_ZERO_INIT_LOCALS=OFF -DCUTLAB_WITH_MEDIA=ON \
             -DCUTLAB_FFMPEG_ROOT=$PWD/build/ffmpeg-linux
-          cmake --build build/core-vg -j 4 --target cutlab_stress_preview cutlab_timeline_tests cutlab_export_tests
+          cmake --build build/core-vg -j 4 --target cutlab_stress_preview cutlab_timeline_tests cutlab_export_tests cutlab_effects_tests
           M=build/android-media; T=build/test-media
           VG="valgrind --error-exitcode=9 --track-origins=yes --leak-check=full --errors-for-leak-kinds=definite,indirect"
           $VG build/core-vg/cutlab_stress_preview 1 $T/gray60.mp4 $T/rotated.mp4 $T/hevc10.mp4 $T/tone.mp3 $T/red.png $M/hevc_1080p60.mp4 $M/vfr.mkv
           CUTLAB_UNDER_VALGRIND=1 CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
           mkdir -p "${{ runner.temp }}/vg-out"
           CUTLAB_EXPORT_CODEC=mpeg4 CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_export_tests --quick
+          CUTLAB_EXPORT_CODEC=mpeg4 CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_effects_tests --quick
       - name: Timeline benchmark (Linux)
         run: build/core/cutlab_bench_timeline build/test-media build/android-media
+      - name: Effects benchmark (Linux, ms per frame at 1080p/1440p/4K)
+        run: build/core/cutlab_bench_effects 10
       - name: Export benchmark (Linux, software encoders)
         env:
           CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
@@ -234,6 +243,7 @@ jobs:
         run: |
           $env:PATH = "${{ github.workspace }}\build\ffmpeg-win64\bin;$env:PATH"
           build/core/Release/cutlab_bench_timeline.exe "${{ github.workspace }}/build/test-media"
+          build/core/Release/cutlab_bench_effects.exe 10
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}

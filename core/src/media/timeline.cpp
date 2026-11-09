@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "../diag/diag.hpp"
+#include "compositor.hpp"
 #include "json.hpp"
 
 namespace cutlab::media {
@@ -85,6 +86,25 @@ TlPlan TlPlan::parse(const std::string& text) {
   int n = 0;
   bool header = false;
   TlTrack* track = nullptr;
+  // Effects, fades and transitions name their clip; resolved at the end.
+  struct PendingFx {
+    std::string clip;
+    TlEffect fx;
+    int line;
+  };
+  struct PendingFade {
+    std::string clip;
+    Ticks in, out;
+    int line;
+  };
+  struct PendingTin {
+    std::string clip;
+    TlTransitionIn tin;
+    int line;
+  };
+  std::vector<PendingFx> pending_fx;
+  std::vector<PendingFade> pending_vfade;
+  std::vector<PendingTin> pending_tin;
   while (std::getline(in, line)) {
     ++n;
     if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -164,6 +184,57 @@ TlPlan TlPlan::parse(const std::string& text) {
       }
       plan.duration = std::max(plan.duration, ov.end());
       plan.overlays.push_back(std::move(ov));
+    } else if (kw == "canvas") {
+      const auto c = split_fields(line, 3, nullptr);
+      if (c.size() != 3) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": canvas needs width and height");
+      plan.canvas_w = static_cast<int>(to_int(c[1], n));
+      plan.canvas_h = static_cast<int>(to_int(c[2], n));
+      if (plan.canvas_w < 16 || plan.canvas_h < 16 || plan.canvas_w > 16384 || plan.canvas_h > 16384) {
+        throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": bad canvas size");
+      }
+    } else if (kw == "fps") {
+      const auto c = split_fields(line, 3, nullptr);
+      if (c.size() != 3) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": fps needs numerator and denominator");
+      const int64_t num = to_int(c[1], n), den = to_int(c[2], n);
+      if (num <= 0 || den <= 0 || num / den > 240) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": bad fps");
+      plan.fps = Rational::make(num, den);
+    } else if (kw == "preview") {
+      plan.preview_height = std::clamp(static_cast<int>(to_int(rest, n)), 0, 4320);
+    } else if (kw == "effect") {
+      // effect <clip> <type> [name=value,...]
+      std::string params;
+      const auto e = split_fields(line, 3, &params);
+      if (e.size() != 3) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": effect needs a clip and a type");
+      TlEffect fx;
+      fx.type = e[2];
+      size_t i = 0;
+      while (i < params.size()) {
+        size_t j = params.find(',', i);
+        if (j == std::string::npos) j = params.size();
+        const std::string kv = params.substr(i, j - i);
+        const size_t eq = kv.find('=');
+        if (eq == std::string::npos || eq == 0) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": bad effect parameter '" + kv + "'");
+        fx.params[kv.substr(0, eq)] = to_float(kv.substr(eq + 1), n);
+        i = j + 1;
+      }
+      std::string err;
+      if (!normalize_effect(fx, &err)) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": " + err);
+      pending_fx.push_back({e[1], std::move(fx), n});
+    } else if (kw == "vfade") {
+      const auto v = split_fields(line, 4, nullptr);
+      if (v.size() != 4) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": vfade needs a clip, in and out");
+      pending_vfade.push_back({v[1], std::max<Ticks>(0, to_int(v[2], n)), std::max<Ticks>(0, to_int(v[3], n)), n});
+    } else if (kw == "transition") {
+      // transition <clip> <kind> <left> <right> <direction>
+      const auto v = split_fields(line, 6, nullptr);
+      if (v.size() != 6) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": transition needs 5 fields");
+      TlTransitionIn tin;
+      tin.on = true;
+      if (!parse_transition(v[2], &tin.kind)) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": unknown transition '" + v[2] + "'");
+      tin.left = std::max<Ticks>(0, to_int(v[3], n));
+      tin.right = std::max<Ticks>(0, to_int(v[4], n));
+      if (!parse_direction(v[5], &tin.dir)) throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": unknown direction '" + v[5] + "'");
+      if (tin.left + tin.right > 0) pending_tin.push_back({v[1], tin, n});
     } else {
       throw std::invalid_argument("timeline plan line " + std::to_string(n) + ": unknown entry '" + kw + "'");
     }
@@ -171,6 +242,53 @@ TlPlan TlPlan::parse(const std::string& text) {
   if (!header) throw std::invalid_argument("timeline plan: empty");
   for (auto& t : plan.tracks) {
     std::sort(t.clips.begin(), t.clips.end(), [](const TlClip& a, const TlClip& b) { return a.start < b.start; });
+  }
+  auto find_clip = [&](const std::string& id, int line_no) -> TlClip& {
+    for (auto& t : plan.tracks)
+      for (auto& c : t.clips)
+        if (c.id == id) return c;
+    throw std::invalid_argument("timeline plan line " + std::to_string(line_no) + ": no clip '" + id + "'");
+  };
+  for (auto& p : pending_fx) find_clip(p.clip, p.line).effects.push_back(std::move(p.fx));
+  for (auto& p : pending_vfade) {
+    TlClip& c = find_clip(p.clip, p.line);
+    // Fade in and out together at most cover the clip.
+    c.vfade_in = std::min(p.in, c.duration);
+    c.vfade_out = std::min(p.out, c.duration - c.vfade_in);
+  }
+  for (auto& p : pending_tin) find_clip(p.clip, p.line).tin = p.tin;
+  // Transitions need the clip before, ending exactly at the cut. Each side
+  // takes at most half of its clip, so the two transitions of a clip never
+  // overlap; an overlap cannot reach before the start of the media.
+  for (auto& t : plan.tracks) {
+    if (t.kind == TlKind::audio) {
+      for (auto& c : t.clips) c.tin.on = false;
+    }
+    for (size_t i = 0; i < t.clips.size(); ++i) {
+      TlClip& b = t.clips[i];
+      if (!b.tin.on) continue;
+      if (i == 0 || t.clips[i - 1].end() != b.start) {
+        b.tin.on = false;
+        continue;
+      }
+      TlClip& a = t.clips[i - 1];
+      b.tin.left = std::min(b.tin.left, a.duration / 2);
+      b.tin.right = std::min(b.tin.right, b.duration / 2);
+      if (transition_overlaps(b.tin.kind)) b.tin.left = std::min(b.tin.left, b.src_in);
+      if (b.tin.left + b.tin.right <= 0) {
+        b.tin.on = false;
+        continue;
+      }
+      if (transition_overlaps(b.tin.kind)) {
+        b.lead = b.tin.left;
+        a.tail = b.tin.right;
+        a.xfade_out_left = b.tin.left;
+      }
+    }
+  }
+  for (const auto& t : plan.tracks) {
+    if (t.kind == TlKind::audio) continue;
+    for (const auto& c : t.clips) plan.composite = plan.composite || c.styled() || c.tin.on;
   }
   return plan;
 }
@@ -218,6 +336,24 @@ std::vector<TlSegment> picture_segments(const TlPlan& plan) {
 std::string picture_signature(const TlPlan& plan) {
   std::ostringstream s;
   s << plan.hardware << ';';
+  if (plan.composite) {
+    // Everything that changes a composed picture.
+    s << "c" << plan.canvas_w << 'x' << plan.canvas_h << '@' << plan.fps.num << '/' << plan.fps.den << 'p' << plan.preview_height << ';';
+    for (const auto& t : plan.tracks) {
+      if (t.kind == TlKind::audio) continue;
+      s << 't' << t.hidden;
+      for (const auto& c : t.clips) {
+        s << '[' << c.id << '@' << c.start << '+' << c.duration << '@' << c.src_in << '@' << c.uri << " v" << c.vfade_in << ',' << c.vfade_out;
+        if (c.tin.on) s << " t" << static_cast<int>(c.tin.kind) << ',' << static_cast<int>(c.tin.dir) << ',' << c.tin.left << ',' << c.tin.right;
+        for (const auto& e : c.effects) {
+          s << ' ' << e.type;
+          for (const auto& [k, v] : e.params) s << ',' << k << '=' << v;
+        }
+        s << ']';
+      }
+      s << ';';
+    }
+  }
   for (const auto& seg : picture_segments(plan)) {
     s << seg.start << '-' << seg.end << ':';
     if (seg.clip) s << seg.clip->id << '@' << seg.clip->src_in << '@' << seg.clip->start << '@' << seg.clip->uri;
@@ -273,7 +409,7 @@ void Mixer::forget_far(const TlPlan& plan, int64_t pos) {
   std::set<std::string> keep;
   for (const auto& t : plan.tracks) {
     for (const auto& c : t.clips) {
-      const int64_t cs = ticks_to_samples(c.start), ce = ticks_to_samples(c.end());
+      const int64_t cs = ticks_to_samples(c.start - c.lead), ce = ticks_to_samples(c.end() + c.tail);
       // Keep decoders around the playhead (a short seek back reuses them).
       if (ce >= pos - kMixRate && cs <= pos + 10LL * kMixRate) keep.insert(key(c));
     }
@@ -294,10 +430,12 @@ void Mixer::render(const TlPlan& plan, int64_t pos, size_t frames, float* out, f
     float peak = 0.0f;
     for (const TlClip& c : tr.clips) {
       if (!c.audio || c.volume <= 0.0f) continue;
-      const int64_t cs = ticks_to_samples(c.start), ce = ticks_to_samples(c.end());
+      // Heard over [start - lead, end + tail): overlap transitions cross-fade.
+      const int64_t c0 = ticks_to_samples(c.start);
+      const int64_t cs = ticks_to_samples(c.start - c.lead), ce = ticks_to_samples(c.end() + c.tail);
       if (ce <= pos || cs >= end) continue;
       const int64_t from = std::max(cs, pos), to = std::min(ce, end);
-      const int64_t k0 = from - cs;
+      const int64_t k0 = from - c0;  // clip-relative (negative in the lead)
       Source* s = source_for(c, k0);
       if (!s || s->failed || !s->dec) continue;
       const size_t n = static_cast<size_t>(to - from);
@@ -317,13 +455,26 @@ void Mixer::render(const TlPlan& plan, int64_t pos, size_t frames, float* out, f
         diag::note("mixer: audio decoding stopped (%s)", e.what());
         continue;
       }
-      const int64_t len = ce - cs;
+      const int64_t len = ticks_to_samples(c.end()) - c0;
       const int64_t fin = ticks_to_samples(c.fade_in), fout = ticks_to_samples(c.fade_out);
       const float gain = tr.volume * c.volume;
+      // Equal-power cross-fades: in over [-L, R], out over [len - L', len + tail].
+      const bool xin = c.lead > 0 || (c.tin.on && transition_overlaps(c.tin.kind));
+      const int64_t in_l = ticks_to_samples(c.lead), in_r = xin ? ticks_to_samples(c.tin.right) : 0;
+      const int64_t out_l = ticks_to_samples(c.xfade_out_left), out_r = ticks_to_samples(c.tail);
+      const bool xout = out_l + out_r > 0;
       float* dst = out + (from - pos) * kMixChannels;
       for (size_t i = 0; i < got; ++i) {
         const int64_t k = k0 + static_cast<int64_t>(i);
-        const float g = (fin > 0 || fout > 0) ? gain * fade_gain(k, len, fin, fout) : gain;
+        float g = (fin > 0 || fout > 0) ? gain * fade_gain(std::clamp<int64_t>(k, 0, std::max<int64_t>(0, len - 1)), len, fin, fout) : gain;
+        if (xin && in_l + in_r > 0 && k < in_r) {
+          const double p = std::clamp(static_cast<double>(k + in_l) + 0.5, 0.0, static_cast<double>(in_l + in_r)) / static_cast<double>(in_l + in_r);
+          g *= static_cast<float>(std::sin(p * 1.5707963267948966));
+        }
+        if (xout && k >= len - out_l) {
+          const double p = std::clamp(static_cast<double>(k - (len - out_l)) + 0.5, 0.0, static_cast<double>(out_l + out_r)) / static_cast<double>(out_l + out_r);
+          g *= static_cast<float>(std::cos(p * 1.5707963267948966));
+        }
         const float l = tmp_[2 * i] * g, r = tmp_[2 * i + 1] * g;
         peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
         dst[2 * i] += l * master;
@@ -352,7 +503,8 @@ void Mixer::prepare(const TlPlan& plan, int64_t pos, int64_t ahead) {
     if (!plan.audible(tr) || tr.volume <= 0.0f) continue;
     for (const auto& c : tr.clips) {
       if (!c.audio || c.volume <= 0.0f) continue;
-      const int64_t cs = ticks_to_samples(c.start), ce = ticks_to_samples(c.end());
+      const int64_t c0 = ticks_to_samples(c.start);
+      const int64_t cs = ticks_to_samples(c.start - c.lead), ce = ticks_to_samples(c.end() + c.tail);
       if (ce <= pos || cs >= pos + ahead) continue;
       const std::string k = key(c);
       {
@@ -360,7 +512,7 @@ void Mixer::prepare(const TlPlan& plan, int64_t pos, int64_t ahead) {
         if (sources_.count(k) || ready_.count(k)) continue;
       }
       std::string err;
-      auto s = open(c, std::max<int64_t>(0, pos - cs), &err);
+      auto s = open(c, std::max<int64_t>(cs - c0, pos - c0), &err);
       std::lock_guard<std::mutex> lock(mu_);
       if (!sources_.count(k) && !ready_.count(k)) ready_[k] = std::move(s);
     }
@@ -702,7 +854,13 @@ void TimelinePlayer::video_loop() {
     std::string err;
     bool end = false;
     try {
-      frames = do_seek ? video_seek(*segs, *plan, target, accurate) : video_next(*segs, *plan);
+      if (plan->composite) {
+        active_.clear();
+        frames = do_seek ? comp_seek(*plan, target) : comp_next(*plan);
+      } else {
+        comp_.reset();
+        frames = do_seek ? video_seek(*segs, *plan, target, accurate) : video_next(*segs, *plan);
+      }
       end = frames.empty();
     } catch (const std::bad_alloc&) {
       err = "out of memory while decoding video";
@@ -716,12 +874,22 @@ void TimelinePlayer::video_loop() {
       // Skip the broken segment: black from its start, continue after it.
       frames.clear();
       active_.clear();
-      if (cur_seg_ < segs->size()) frames.push_back({(*segs)[cur_seg_].start, VideoFrame{}});
-      ++cur_seg_;
+      if (plan->composite) {
+        // Black for this frame; the next one is tried again.
+        frames.push_back({frames_to_ticks(comp_n_, plan->fps), VideoFrame{}});
+        ++comp_n_;
+        if (comp_) comp_->invalidate();
+      } else {
+        if (cur_seg_ < segs->size()) frames.push_back({(*segs)[cur_seg_].start, VideoFrame{}});
+        ++cur_seg_;
+      }
     }
     std::string decoder;
     bool hw = false;
-    if (!active_.empty() && active_.back().dec) {
+    if (comp_) {
+      decoder = comp_->pool().decoder_name();
+      hw = comp_->pool().hardware();
+    } else if (!active_.empty() && active_.back().dec) {
       decoder = active_.back().dec->decoder_name();
       hw = active_.back().dec->hardware();
     }
@@ -735,6 +903,69 @@ void TimelinePlayer::video_loop() {
       ++frames_decoded_;
     }
     if (end) video_eof_ = true;
+  }
+}
+
+// ------------------------------------------------------- composed pictures
+
+void TimelinePlayer::comp_ensure(const TlPlan& plan) {
+  // The project frame inside the preview size (the preview quality setting
+  // lowers it; the export always composes at the output size).
+  int cw = plan.canvas_w > 0 ? plan.canvas_w : 1920, ch = plan.canvas_h > 0 ? plan.canvas_h : 1080;
+  int max_w = opts_.max_width, max_h = opts_.max_height;
+  if (plan.preview_height > 0) {
+    max_h = std::min(max_h > 0 ? max_h : plan.preview_height, plan.preview_height);
+    max_w = std::min(max_w > 0 ? max_w : max_h * 16 / 9, (max_h * 16 + 8) / 9);
+  }
+  double scale = 1;
+  if (max_w > 0) scale = std::min(scale, static_cast<double>(max_w) / cw);
+  if (max_h > 0) scale = std::min(scale, static_cast<double>(max_h) / ch);
+  const int w = std::max(16, static_cast<int>(std::lround(cw * scale)) & ~1);
+  const int h = std::max(16, static_cast<int>(std::lround(ch * scale)) & ~1);
+  if (!comp_ || comp_->width() != w || comp_->height() != h) {
+    DecodeOptions o;
+    o.prefer_hardware = plan.hardware;
+    comp_ = std::make_unique<Compositor>(w, h, o);
+  }
+}
+
+TimelinePlayer::QFrame TimelinePlayer::comp_frame(Ticks t, bool black) {
+  QFrame q;
+  q.pts = t;
+  if (!black) {
+    const RgbaBuffer& p = comp_->picture();
+    q.frame.width = p.w;
+    q.frame.height = p.h;
+    q.frame.pts = t;
+    q.frame.rgba = p.px;
+  }
+  comp_last_push_ = t;
+  return q;
+}
+
+std::vector<TimelinePlayer::QFrame> TimelinePlayer::comp_seek(const TlPlan& plan, Ticks t) {
+  comp_ensure(plan);
+  comp_->invalidate();
+  if (plan.duration > 0 && t >= plan.duration) t = std::max<Ticks>(0, plan.duration - 1);
+  bool black = false;
+  comp_->render(plan, t, &black);
+  comp_n_ = ticks_to_frames(t, plan.fps) + 1;
+  return {comp_frame(t, black)};
+}
+
+std::vector<TimelinePlayer::QFrame> TimelinePlayer::comp_next(const TlPlan& plan) {
+  comp_ensure(plan);
+  // The next grid frame that differs (a still picture is queued again
+  // every 0.25 s so the queue keeps moving).
+  for (;;) {
+    const Ticks t = frames_to_ticks(comp_n_, plan.fps);
+    if (t >= plan.duration) return {};
+    ++comp_n_;
+    bool black = false;
+    const bool changed = comp_->render(plan, t, &black);
+    if (changed || t - comp_last_push_ >= kTicksPerSecond / 4) {
+      return {comp_frame(t, black)};
+    }
   }
 }
 
@@ -834,7 +1065,7 @@ void TimelinePlayer::prepare_loop() {
         break;
       }
     }
-    const bool need_video = next && !(prepared_.key == video_key(*next->clip) && prepared_.seg_start == next->start);
+    const bool need_video = next && !plan->composite && !(prepared_.key == video_key(*next->clip) && prepared_.seg_start == next->start);
     const uint64_t gen = generation_;
     lock.unlock();
     try {

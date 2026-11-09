@@ -48,6 +48,8 @@ void cutlab_export_cancel(cutlab_export*) {}
 cutlab_status cutlab_export_status(cutlab_export*, char**) { return CUTLAB_ERR_UNAVAILABLE; }
 void cutlab_export_close(cutlab_export*) {}
 cutlab_status cutlab_export_encoders(int32_t, char**) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_render_frame(const char*, int64_t, int32_t, int32_t, uint8_t*, int64_t) { return CUTLAB_ERR_UNAVAILABLE; }
+cutlab_status cutlab_effect_catalog(char**) { return CUTLAB_ERR_UNAVAILABLE; }
 cutlab_status cutlab_diag_init(const char*, const char*) { return CUTLAB_ERR_UNAVAILABLE; }
 void cutlab_diag_note(const char*) {}
 cutlab_status cutlab_diag_recent(char**) { return CUTLAB_ERR_UNAVAILABLE; }

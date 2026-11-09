@@ -43,6 +43,8 @@ if(CUTLAB_WITH_MEDIA)
     src/media/audio_output.cpp
     src/media/timeline.cpp
     src/media/export.cpp
+    src/media/effects.cpp
+    src/media/compositor.cpp
     src/media/miniaudio_impl.c
     src/media/media_capi.cpp
     src/diag/diag.cpp)
@@ -141,6 +143,15 @@ if(CUTLAB_BUILD_TESTS)
     target_link_libraries(cutlab_export_tests PRIVATE cutlab_core)
     add_test(NAME cutlab_export_tests COMMAND cutlab_export_tests)
     set_tests_properties(cutlab_export_tests PROPERTIES TIMEOUT 1800)
+    add_executable(cutlab_effects_tests tests/test_effects.cpp)
+    target_link_libraries(cutlab_effects_tests PRIVATE cutlab_core)
+    add_test(NAME cutlab_effects_tests COMMAND cutlab_effects_tests)
+    set_tests_properties(cutlab_effects_tests PROPERTIES TIMEOUT 1800)
+    # Effect math per frame at 1080p/1440p/4K (links the effects code directly).
+    find_package(Threads REQUIRED)
+    add_executable(cutlab_bench_effects tests/bench_effects.cpp src/media/effects.cpp)
+    target_include_directories(cutlab_bench_effects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/media)
+    target_link_libraries(cutlab_bench_effects PRIVATE Threads::Threads)
     add_executable(cutlab_bench_timeline tests/bench_timeline.cpp)
     target_link_libraries(cutlab_bench_timeline PRIVATE cutlab_core)
     # Preview stress test (run by hand / in CI on real-size media files).

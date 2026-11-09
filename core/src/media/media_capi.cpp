@@ -7,6 +7,7 @@
 
 #include "../diag/diag.hpp"
 #include "audio_decoder.hpp"
+#include "compositor.hpp"
 #include "export.hpp"
 #include "cutlab/cutlab_core.h"
 #include "json.hpp"
@@ -393,6 +394,58 @@ cutlab_status cutlab_timeline_render_audio(cutlab_timeline* t, int64_t start_tic
     if (peaks) {
       for (int32_t i = 0; i < peaks_capacity && i < static_cast<int32_t>(p.size()); ++i) peaks[i] = p[static_cast<size_t>(i)];
     }
+  });
+}
+
+cutlab_status cutlab_render_frame(const char* plan, int64_t ticks, int32_t width, int32_t height, uint8_t* dst, int64_t capacity) {
+  if (!plan || !dst || width < 2 || height < 2 || width > 16384 || height > 16384) return CUTLAB_ERR_INVALID_ARGUMENT;
+  if (capacity < static_cast<int64_t>(width) * height * 4) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    const TlPlan p = TlPlan::parse(plan);
+    DecodeOptions o;
+    o.prefer_hardware = p.hardware;
+    o.one_shot = true;
+    Compositor c(width, height, o);
+    bool black = false;
+    c.render(p, ticks, &black);
+    std::memcpy(dst, c.picture().px.data(), static_cast<size_t>(width) * height * 4);
+  });
+}
+
+cutlab_status cutlab_effect_catalog(char** out_json) {
+  if (!out_json) return CUTLAB_ERR_INVALID_ARGUMENT;
+  return guarded([&] {
+    JsonWriter j;
+    j.begin_object();
+    j.key("effects").begin_array();
+    for (const auto& e : effect_catalog()) {
+      j.begin_object();
+      j.key("type").value(e.type);
+      j.key("params").begin_array();
+      for (const auto& p : e.params) {
+        j.begin_object();
+        j.key("name").value(p.name);
+        j.key("min").value(p.lo);
+        j.key("max").value(p.hi);
+        j.key("default").value(p.def);
+        j.end_object();
+      }
+      j.end_array();
+      j.end_object();
+    }
+    j.end_array();
+    j.key("looks").begin_array();
+    for (const auto& l : filter_looks()) j.value(l);
+    j.end_array();
+    j.key("transitions").begin_array();
+    for (const char* t : {"dissolve", "dip_black", "dip_white", "wipe", "slide", "zoom_in", "zoom_out", "blur"}) j.value(t);
+    j.end_array();
+    j.key("directions").begin_array();
+    for (const char* d : {"left", "right", "up", "down"}) j.value(d);
+    j.end_array();
+    j.end_object();
+    *out_json = dup_string(j.str());
+    if (!*out_json) throw std::bad_alloc();
   });
 }
 

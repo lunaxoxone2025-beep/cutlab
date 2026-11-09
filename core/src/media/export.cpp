@@ -1,5 +1,7 @@
 #include "export.hpp"
 
+#include "compositor.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -493,44 +495,6 @@ void remove_file(const std::string& path) {
   std::filesystem::remove(fs_path(path), ec);
 }
 
-/// Decodes the picture of one clip for consecutive output times.
-struct ClipVideo {
-  std::string key;
-  Ticks end = 0;
-  std::unique_ptr<VideoDecoder> dec;
-  VideoFrame cur, nxt;
-  bool has_cur = false, has_nxt = false;
-  bool failed = false;
-  bool still = false;
-  int64_t serial = 0;  // changes whenever `cur` changes
-
-  // The frame displayed at source time t (the last one with pts <= t).
-  const VideoFrame* at(Ticks t, Ticks slack) {
-    if (failed) return nullptr;
-    if (still) {
-      if (!has_cur) {
-        has_cur = dec->next(cur);
-        ++serial;
-      }
-      return has_cur ? &cur : nullptr;
-    }
-    // Requests only move forward; a long jump (an upper clip covered this
-    // one for a while) seeks instead of decoding through.
-    const bool far = has_cur && t > cur.pts + 5 * kTicksPerSecond;
-    if (!has_cur || far) {
-      dec->seek(t, true);
-      has_cur = dec->next(cur);
-      has_nxt = has_cur && dec->next(nxt);
-      ++serial;
-    }
-    while (has_nxt && nxt.pts <= t + slack) {
-      cur = std::move(nxt);
-      has_nxt = dec->next(nxt);
-      ++serial;
-    }
-    return has_cur ? &cur : nullptr;
-  }
-};
 
 }  // namespace
 
@@ -1005,14 +969,24 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   };
 
   // ---- pictures
-  const auto segments = picture_segments(plan);
-  std::map<std::string, ClipVideo> videos;
+  // Plain pictures are converted straight to the output format; pictures
+  // with effects, video fades or transitions are composed in RGBA by the
+  // compositor the preview uses, then converted.
   DecodeOptions dopts;
   dopts.native = true;
   dopts.prefer_hardware = plan.hardware;
-  const Ticks slack = kTicksPerSecond / 1000;
+  std::unique_ptr<Compositor> comp;
+  std::unique_ptr<FramePool> own_pool;
+  if (plan.composite) {
+    comp = std::make_unique<Compositor>(W, H, dopts);
+  } else {
+    own_pool = std::make_unique<FramePool>(dopts);
+  }
+  FramePool& pool = comp ? comp->pool() : *own_pool;
+  int64_t comp_serial = 0;
   SwsContext* sws = nullptr;
   SwsContext* sws_alpha = nullptr;
+  SwsContext* from_rgba = nullptr;
   FramePtr tmp;           // scaled, before rotation
   std::vector<uint8_t> premult;  // stills with transparency, premultiplied on black
   FramePtr canvas;        // last composed picture
@@ -1020,15 +994,19 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   FramePtr nv12;
   SwsContext* to_nv12 = nullptr;
   struct SwsGuard {
-    SwsContext** p[3];
+    SwsContext** p[4];
     ~SwsGuard() {
       for (auto** q : p) {
         if (*q) sws_freeContext(*q);
       }
     }
-  } sws_guard{{&sws, &sws_alpha, &to_nv12}};
-  size_t seg_i = 0;
-  int64_t decode_errors_seen = 0;
+  } sws_guard{{&sws, &sws_alpha, &to_nv12, &from_rgba}};
+  auto collect_warnings = [&] {
+    auto w = pool.take_warnings();
+    if (w.empty()) return;
+    std::lock_guard<std::mutex> lock(mu_);
+    for (auto& m : w) warnings_.push_back(std::move(m));
+  };
 
   set_state(State::rendering);
   {
@@ -1040,48 +1018,24 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   for (int64_t n = 0; n < total; ++n) {
     if (cancel_ || !wait_if_paused()) throw Cancelled{};
     const Ticks t = frame_time(n);
-    while (seg_i + 1 < segments.size() && segments[seg_i].end <= t) ++seg_i;
-    const TlClip* clip = (seg_i < segments.size() && segments[seg_i].start <= t && t < segments[seg_i].end) ? segments[seg_i].clip : nullptr;
-
-    // Decoders for clips that are over are closed.
-    for (auto it = videos.begin(); it != videos.end();) {
-      if (it->second.end <= t) {
-        decode_errors_seen += it->second.dec ? it->second.dec->decode_errors() : 0;
-        it = videos.erase(it);
-      } else {
-        ++it;
-      }
-    }
+    const Composition here = compose_at(plan, t);
+    const bool composed = comp && here.styled();
 
     const VideoFrame* pic = nullptr;
     std::string key;
-    if (clip) {
-      const std::string ck = clip->id + '\n' + clip->uri;
-      auto it = videos.find(ck);
-      if (it == videos.end()) {
-        ClipVideo cv;
-        cv.key = ck;
-        cv.end = clip->end();
-        cv.still = clip->still;
-        try {
-          cv.dec = std::make_unique<VideoDecoder>(Source::parse(clip->uri), dopts);
-          cv.still = cv.still || cv.dec->still_image();
-        } catch (const std::exception& e) {
-          cv.failed = true;
-          std::lock_guard<std::mutex> lock(mu_);
-          warnings_.push_back("clip " + clip->id + ": the video could not be read (" + std::string(e.what()) + "); it is exported as black");
-        }
-        it = videos.emplace(ck, std::move(cv)).first;
+    if (composed) {
+      bool black = false;
+      if (comp->render(plan, t, &black)) ++comp_serial;
+      key = "composed#" + std::to_string(comp_serial);
+    } else {
+      pool.trim(plan, t);
+      if (here.a) {
+        int64_t serial = 0;
+        pic = pool.frame(*here.a, here.a_src, &serial);
+        if (pic && pic->native) key = here.a->id + '\n' + here.a->uri + '\n' + std::to_string(serial);
       }
-      try {
-        pic = it->second.at(clip->src_in + (t - clip->start), slack);
-      } catch (const std::exception& e) {
-        it->second.failed = true;
-        std::lock_guard<std::mutex> lock(mu_);
-        warnings_.push_back("clip " + clip->id + ": decoding stopped (" + std::string(e.what()) + "); the rest of the clip is black");
-      }
-      if (pic && pic->native) key = ck + '\n' + std::to_string(it->second.serial);
     }
+    collect_warnings();
     std::string ov_key;
     for (size_t i = 0; i < overlays.size(); ++i) {
       if (overlays[i].start <= t && t < overlays[i].end) ov_key += std::to_string(i) + ',';
@@ -1091,13 +1045,19 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
     if (!canvas || key != canvas_key) {
       FramePtr c = new_picture(AV_PIX_FMT_YUV420P, W, H);
       fill_black(c.get());
-      if (pic && pic->native) {
+      if (composed) {
+        const RgbaBuffer& rgba = comp->picture();
+        from_rgba = sws_getCachedContext(from_rgba, W, H, AV_PIX_FMT_RGBA, W, H, AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr);
+        if (!from_rgba) throw MediaError("cannot convert the composed picture");
+        sws_setColorspaceDetails(from_rgba, sws_getCoefficients(SWS_CS_DEFAULT), 1, sws_getCoefficients(SWS_CS_ITU709), 0, 0, 1 << 16, 1 << 16);
+        const uint8_t* src[4] = {rgba.px.data(), nullptr, nullptr, nullptr};
+        const int sls[4] = {W * 4, 0, 0, 0};
+        sws_scale(from_rgba, src, sls, 0, H, c->data, c->linesize);
+      } else if (pic && pic->native) {
         const AVFrame* f = pic->native.get();
         // Fit inside the frame (letterbox), even sizes and positions.
-        const double scale = std::min(static_cast<double>(W) / pic->width, static_cast<double>(H) / pic->height);
-        const int fw = std::clamp(static_cast<int>(std::lround(pic->width * scale)) & ~1, 2, W);
-        const int fh = std::clamp(static_cast<int>(std::lround(pic->height * scale)) & ~1, 2, H);
-        const int x0 = ((W - fw) / 2) & ~1, y0 = ((H - fh) / 2) & ~1;
+        int x0, y0, fw, fh;
+        fit_rect(pic->width, pic->height, W, H, &x0, &y0, &fw, &fh);  // same place as composed pictures
         const bool side = pic->rotation == 90 || pic->rotation == 270;
         const int sw_w = side ? fh : fw, sw_h = side ? fw : fh;  // size before rotation
 
@@ -1217,7 +1177,8 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
   encode_audio_until(total_samples, true);
   if (run.aenc) finish_encoder(run.aenc.get(), run.ast, false);
   finish_encoder(venc, run.vst, enc_info.hardware);
-  for (auto& v : videos) decode_errors_seen += v.second.dec ? v.second.dec->decode_errors() : 0;
+  collect_warnings();
+  const int64_t decode_errors_seen = pool.decode_errors();
   check(av_write_trailer(run.fmt), "finishing the output file");
   {
     std::lock_guard<std::mutex> lock(mu_);
