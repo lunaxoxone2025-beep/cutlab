@@ -6,6 +6,7 @@ library;
 
 import 'model.dart';
 import 'time.dart';
+import 'timeline.dart';
 
 /// One adjustable value of an effect.
 class EffectParam {
@@ -261,7 +262,7 @@ TransitionSpan? transitionSpan(Project p, Track track, int index) {
     final aStill = ma?.kind == MediaKind.image;
     if (!bStill) left = left.clamp(0, b.sourceInTicks);
     if (!aStill) {
-      final room = ma == null || ma.durationTicks <= 0 ? 0 : ma.durationTicks - (a.sourceInTicks + a.sourceDurationTicks);
+      final int room = ma == null || ma.durationTicks <= 0 ? 0 : ma.durationTicks - (a.sourceInTicks + a.sourceDurationTicks);
       right = right.clamp(0, room < 0 ? 0 : room);
     }
     // Speed changes are not rendered yet: no overlap for such clips.

@@ -511,6 +511,8 @@ std::vector<uint8_t>& scratch(int which) {
   return s[which];
 }
 
+constexpr int kBlurBand = 128;  // columns per vertical-pass job
+
 // One box pass, horizontal then vertical, radius r, of the area of img;
 // tmp holds w*h*4 bytes. Division by the window is a multiply (16.16).
 void box_pass(Rgba img, int x0, int y0, int w, int h, int r, uint8_t* tmp) {
@@ -544,7 +546,7 @@ void box_pass(Rgba img, int x0, int y0, int w, int h, int r, uint8_t* tmp) {
     }
   });
   // Vertical: tmp -> img, in bands of columns (running sums per column).
-  const int band = 128;
+  constexpr int band = kBlurBand;
   const int bands = (w + band - 1) / band;
   WorkPool::shared().parallel(bands, [&](int b, int e) {
     uint32_t sum[band * 4];
