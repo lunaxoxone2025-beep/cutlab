@@ -132,6 +132,99 @@ class TimelineActions {
     _run((p) => p.setFades(pc.clip.id, fadeInTicks: fadeIn, fadeOutTicks: fadeOut));
   }
 
+  // ---------------------------------------------- effects and transitions
+
+  /// The single selected clip when it can take effects (video or photo).
+  PlacedClip? get visual {
+    final pc = single;
+    if (pc == null || (pc.track.kind != TrackKind.video && pc.track.kind != TrackKind.image)) return null;
+    return pc;
+  }
+
+  void addEffect(String type) {
+    final pc = visual;
+    if (pc == null) return onMessage('Select a video or photo clip');
+    _run((p) => p.addEffects(pc.clip.id, [newEffect(type, controller.newId())]));
+  }
+
+  /// Replaces the clip's effects with a ready-made look (null: no effects).
+  void applyLook(LookPreset? look) {
+    final pc = visual;
+    if (pc == null) return onMessage('Select a video or photo clip');
+    _run((p) => p.setEffects(pc.clip.id, look == null ? const [] : look.build(controller.newId)));
+  }
+
+  /// Parameter changes while a slider is dragged: applied at once (seen in
+  /// the preview), one undo step when [commit] is true (drag end).
+  void setEffectParams(String effectId, Map<String, double> params, {bool commit = true}) {
+    final pc = visual;
+    if (pc == null) return;
+    _live((p) => p.updateEffect(pc.clip.id, effectId, params: params), commit);
+  }
+
+  /// A quick adjustment (beginner sliders): the first effect of [type] is
+  /// changed, or one is added.
+  void setQuickAdjust(String type, String param, double value, {bool commit = true}) {
+    final pc = visual;
+    if (pc == null) return;
+    _live((p) {
+      final c = p.find(pc.clip.id)!.clip;
+      final e = c.effects.where((e) => e.type == type).firstOrNull;
+      if (e != null) return p.updateEffect(c.id, e.id, params: {param: value}, enabled: true);
+      return p.addEffects(c.id, [newEffect(type, controller.newId(), params: {param: value})]);
+    }, commit);
+  }
+
+  void setEffectEnabled(String effectId, bool enabled) {
+    final pc = visual;
+    if (pc == null) return;
+    _run((p) => p.updateEffect(pc.clip.id, effectId, enabled: enabled));
+  }
+
+  void removeEffect(String effectId) {
+    final pc = visual;
+    if (pc == null) return;
+    _run((p) => p.removeEffect(pc.clip.id, effectId));
+  }
+
+  void moveEffect(String effectId, int newIndex) {
+    final pc = visual;
+    if (pc == null) return;
+    _run((p) => p.moveEffect(pc.clip.id, effectId, newIndex));
+  }
+
+  /// Copies the selected clip's effects to every other video/photo clip on
+  /// its track.
+  void copyEffectsToTrack() {
+    final pc = visual;
+    if (pc == null) return;
+    _run((p) => p.copyEffects(pc.clip.id, pc.track.clips.map((c) => c.id), controller.newId));
+  }
+
+  void setVideoFades({int? fadeIn, int? fadeOut, bool commit = true}) {
+    final pc = visual;
+    if (pc == null) return;
+    _live((p) => p.setVideoFades(pc.clip.id, fadeInTicks: fadeIn, fadeOutTicks: fadeOut), commit);
+  }
+
+  /// Sets the transition into [clipId] (the selected clip by default);
+  /// null removes it.
+  void setTransition(Transition? t, {String? clipId, bool commit = true}) {
+    final id = clipId ?? visual?.clip.id;
+    if (id == null) return onMessage('Select the clip after the cut');
+    _live((p) => p.setTransition(id, t), commit);
+  }
+
+  void _live(Project Function(Project p) op, bool commit) {
+    // Live steps and the final one form a single undo step.
+    try {
+      controller.editLive(op);
+    } on EditException catch (e) {
+      if (commit) onMessage(e.message);
+    }
+    if (commit) controller.commitLive();
+  }
+
   void setDuration(int ticks) {
     final pc = single;
     if (pc == null) return;

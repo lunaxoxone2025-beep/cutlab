@@ -12,7 +12,7 @@ import 'timeline_assets.dart';
 import 'timeline_painter.dart';
 import 'timeline_state.dart';
 
-enum _Mode { none, pan, zoom, scrub, move, trimStart, trimEnd }
+enum _Mode { none, pan, zoom, scrub, move, trimStart, trimEnd, transition }
 
 /// The multi-track timeline: ruler, track headers and clip lanes.
 ///
@@ -21,12 +21,17 @@ enum _Mode { none, pan, zoom, scrub, move, trimStart, trimEnd }
 /// to scrub. Long-press a clip to select and move it in one gesture.
 /// Mouse: click/drag clips directly, Ctrl/Shift-click for multi-select,
 /// wheel to scroll, Ctrl+wheel to zoom.
+/// Transitions show as bars across cuts: tap one to edit it, drag its ends
+/// to make it longer or shorter.
 class TimelineView extends StatefulWidget {
-  const TimelineView({super.key, required this.controller, required this.state, required this.assets});
+  const TimelineView({super.key, required this.controller, required this.state, required this.assets, this.onTransitionTap});
 
   final EditorController controller;
   final TimelineState state;
   final TimelineAssets assets;
+
+  /// A transition bar was tapped (the clip after the cut is selected).
+  final ValueChanged<String>? onTransitionTap;
 
   @override
   State<TimelineView> createState() => _TimelineViewState();
@@ -86,9 +91,39 @@ class _TimelineViewState extends State<TimelineView> {
     return (row: row, clip: hit, edge: edge, ruler: false);
   }
 
+  /// The transition bar under [p]: the clip after the cut, and whether an
+  /// end (grip) was hit.
+  ({String clipId, int cut, bool grip, bool locked})? _hitTransition(Offset p) {
+    if (p.dy < rulerHeight) return null;
+    final y = p.dy - rulerHeight + s.scrollY;
+    final project = s.preview ?? c.project;
+    final slop = _device == PointerDeviceKind.mouse ? 5.0 : 12.0;
+    for (final r in layoutTracks(project)) {
+      if (y < r.top || y >= r.bottom) continue;
+      for (var i = 1; i < r.track.clips.length; i++) {
+        final span = transitionSpan(project, r.track, i);
+        if (span == null) continue;
+        final cut = r.track.clips[i].startTicks;
+        final bar = transitionBar(s, r, rulerHeight + r.top - s.scrollY, span, cut);
+        if (!bar.inflate(slop / 2).contains(p)) continue;
+        final grip = (p.dx - bar.left).abs() <= slop || (p.dx - bar.right).abs() <= slop;
+        return (clipId: r.track.clips[i].id, cut: cut, grip: grip, locked: r.track.locked);
+      }
+    }
+    return null;
+  }
+
+  int _transitionCut = 0;
+
   // --------------------------------------------------------------- gestures
 
   void _onTapUp(TapUpDetails d) {
+    final tr = _hitTransition(d.localPosition);
+    if (tr != null) {
+      s.select(tr.clipId);
+      widget.onTransitionTap?.call(tr.clipId);
+      return;
+    }
     final h = _hit(d.localPosition);
     if (h.ruler) {
       s.setPlayhead(s.ticksAtX(d.localPosition.dx), c.project);
@@ -120,6 +155,15 @@ class _TimelineViewState extends State<TimelineView> {
     _lastScale = 1;
     if (d.pointerCount > 1) {
       _mode = _Mode.zoom;
+      return;
+    }
+    final tr = _hitTransition(d.localFocalPoint);
+    if (tr != null && tr.grip && !tr.locked) {
+      s.select(tr.clipId);
+      _mode = _Mode.transition;
+      _dragClip = tr.clipId;
+      _transitionCut = tr.cut;
+      s.setPreview(c.project);
       return;
     }
     final h = _hit(d.localFocalPoint);
@@ -169,6 +213,8 @@ class _TimelineViewState extends State<TimelineView> {
       case _Mode.trimStart:
       case _Mode.trimEnd:
         _updateDrag(d.localFocalPoint);
+      case _Mode.transition:
+        _updateTransition(d.localFocalPoint);
       case _Mode.none:
         break;
     }
@@ -179,7 +225,7 @@ class _TimelineViewState extends State<TimelineView> {
       s.scrubbing = false;
       s.touch();
     }
-    if (_mode == _Mode.move || _mode == _Mode.trimStart || _mode == _Mode.trimEnd) _endDrag();
+    if (_mode == _Mode.move || _mode == _Mode.trimStart || _mode == _Mode.trimEnd || _mode == _Mode.transition) _endDrag();
     _mode = _Mode.none;
   }
 
@@ -262,6 +308,22 @@ class _TimelineViewState extends State<TimelineView> {
       next = s.preview; // keep the last valid position
     }
     s.setPreview(next, guide: guide);
+  }
+
+  /// Dragging a grip: the transition stays centred on the cut, so its
+  /// length is twice the distance from the cut (limited by setTransition).
+  void _updateTransition(Offset at) {
+    final id = _dragClip;
+    if (id == null) return;
+    final base = c.project;
+    final tr = base.find(id)?.clip.transitionIn;
+    if (tr == null) return;
+    final d = 2 * (s.ticksAtX(at.dx) - _transitionCut).abs();
+    try {
+      s.setPreview(base.setTransition(id, tr.copyWith(durationTicks: d < 1 ? 1 : d)));
+    } on EditException {
+      // keep the last valid length
+    }
   }
 
   void _endDrag() {

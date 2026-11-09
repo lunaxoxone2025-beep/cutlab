@@ -107,6 +107,34 @@ class FfiMediaEngine extends MediaEngine {
   Future<List<EncoderInfo>> encoders({bool probe = false}) async => EncoderInfo.listFromJson(jsonDecode(await _encodersAsync(probe)));
 
   @override
+  Future<RgbaImage> renderFrame(String plan, int ticks, int width, int height) => Isolate.run(() {
+        final b = _bindings();
+        final p = plan.toNativeUtf8();
+        final size = width * height * 4;
+        final buf = calloc<Uint8>(size);
+        try {
+          if (b.renderFrame(p, ticks, width, height, buf, size) != EngineBindings.statusOk) throw MediaEngineException(b.lastErrorMessage);
+          return RgbaImage(width, height, Uint8List.fromList(buf.asTypedList(size)), ptsTicks: ticks);
+        } finally {
+          calloc.free(p);
+          calloc.free(buf);
+        }
+      });
+
+  @override
+  String effectCatalogJson() {
+    final out = calloc<Pointer<Utf8>>();
+    try {
+      if (_b.effectCatalog(out) != EngineBindings.statusOk) throw MediaEngineException(_b.lastErrorMessage);
+      final s = out.value.toDartString();
+      _b.free(out.value.cast());
+      return s;
+    } finally {
+      calloc.free(out);
+    }
+  }
+
+  @override
   ExportJob startExport(String plan, String settings) {
     final p = plan.toNativeUtf8();
     final s = settings.toNativeUtf8();

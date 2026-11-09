@@ -82,6 +82,17 @@ class SettingsScreen extends StatelessWidget {
               value: s.hardwareDecoding,
               onChanged: (v) => services.updateSettings(services.settings.value.copyWith(hardwareDecoding: v)),
             ),
+            SwitchListTile(
+              key: const Key('fastEffectsPreview'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Fast effects preview'),
+              subtitle: const Text(
+                  'Shows effects and transitions at 360p while editing, for heavy effects on slower devices. '
+                  'Exported videos always use full quality.',
+                  style: TextStyle(fontSize: 12)),
+              value: s.fastEffectsPreview,
+              onChanged: (v) => services.updateSettings(services.settings.value.copyWith(fastEffectsPreview: v)),
+            ),
             const SizedBox(height: CutlabSpacing.lg),
             const Text('Media engine', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: CutlabSpacing.xs),

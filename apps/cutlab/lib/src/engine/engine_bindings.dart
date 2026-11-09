@@ -84,7 +84,10 @@ class EngineBindings {
                 'cutlab_export_status'),
         exportClose = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>('cutlab_export_close'),
         exportEncoders = lib.lookupFunction<Int32 Function(Int32, Pointer<Pointer<Utf8>>), int Function(int, Pointer<Pointer<Utf8>>)>(
-            'cutlab_export_encoders');
+            'cutlab_export_encoders'),
+        renderFrame = lib.lookupFunction<Int32 Function(Pointer<Utf8>, Int64, Int32, Int32, Pointer<Uint8>, Int64),
+            int Function(Pointer<Utf8>, int, int, int, Pointer<Uint8>, int)>('cutlab_render_frame'),
+        effectCatalog = lib.lookupFunction<Int32 Function(Pointer<Pointer<Utf8>>), int Function(Pointer<Pointer<Utf8>>)>('cutlab_effect_catalog');
 
   final Pointer<Utf8> Function() lastError;
   final void Function(Pointer<Void>) free;
@@ -115,6 +118,8 @@ class EngineBindings {
   final int Function(Pointer<Void>, Pointer<Pointer<Utf8>>) exportStatus;
   final void Function(Pointer<Void>) exportClose;
   final int Function(int, Pointer<Pointer<Utf8>>) exportEncoders;
+  final int Function(Pointer<Utf8>, int, int, int, Pointer<Uint8>, int) renderFrame;
+  final int Function(Pointer<Pointer<Utf8>>) effectCatalog;
   final int Function(int, int, int, Pointer<Pointer<Void>>) tlOpen;
   final void Function(Pointer<Void>) tlClose;
   final int Function(Pointer<Void>, Pointer<Utf8>) tlSetPlan;

@@ -17,6 +17,7 @@ class TimelineToolbar extends StatelessWidget {
     required this.actions,
     required this.onAddText,
     required this.onClipSettings,
+    required this.onEffects,
     required this.viewportWidth,
   });
 
@@ -25,6 +26,7 @@ class TimelineToolbar extends StatelessWidget {
   final TimelineActions actions;
   final VoidCallback onAddText;
   final VoidCallback onClipSettings;
+  final VoidCallback onEffects;
   final double viewportWidth;
 
   @override
@@ -76,6 +78,7 @@ class TimelineToolbar extends StatelessWidget {
                       b('tlPaste', Icons.content_paste, 'Paste at playhead (Ctrl+V)',
                           (state.clipboard?.isEmpty ?? true) ? null : actions.paste),
                       b('tlClip', Icons.tune, 'Clip settings: volume, fades, duration, text', sel ? onClipSettings : null),
+                      b('tlEffects', Icons.auto_fix_high, 'Effects, looks and transitions', actions.visual != null ? onEffects : null),
                       b('tlDetach', Icons.call_split, 'Separate audio from video', canDetach ? actions.detachAudio : null),
                       if (advanced) b('tlUnlink', Icons.link_off, 'Unlink', linked ? actions.unlink : null),
                       if (advanced) b('tlLink', Icons.link, 'Link selected clips', state.selection.length > 1 ? actions.link : null),

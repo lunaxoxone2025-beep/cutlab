@@ -90,4 +90,80 @@ void main() {
     expect(c.project.trackById('a1')!.volume, 1.0, reason: 'the whole drag is one undo step');
     c.dispose();
   });
+  group('effects and transitions in the plan', () {
+    Project styled() {
+      final ids = <String>['x1', 'x2', 'x3', 'x4'].iterator;
+      String next() => (ids..moveNext()).current;
+      var p = project();
+      // c2 follows c1 directly on v1: a dissolve across the cut.
+      p = p.copyWith(media: [
+        for (final m in p.media)
+          if (m.id == 'mute') MediaRef(id: 'mute', kind: MediaKind.video, uri: m.uri, displayName: m.displayName, durationTicks: 60 * tps) else m,
+      ]);
+      p = p.copyWith(tracks: [
+        for (final t in p.tracks)
+          if (t.id == 'v1')
+            t.copyWith(clips: [t.clips[0], t.clips[1].copyWith(sourceInTicks: 20 * tps)])
+          else
+            t,
+      ]);
+      p = p.addEffects('c1', [newEffect('brightness', next(), params: {'amount': 0.25}), newEffect('vignette', next())]);
+      p = p.addEffects('c1', [newEffect('sepia', next())]);
+      p = p.updateEffect('c1', 'x3', enabled: false);
+      p = p.addEffects('c1', [const Effect(id: 'old', type: 'color.basic', params: {'brightness': 0.1})]);
+      p = p.setVideoFades('c2', fadeOutTicks: tps);
+      p = p.setTransition('c2', const Transition(type: 'wipe', durationTicks: tps, direction: 'up'));
+      return p;
+    }
+
+    test('enabled effects in stack order with every value; fades; the transition split at the cut', () {
+      final plan = buildTimelinePlan(styled(), uris, hardware: false);
+      final lines = plan.text.trim().split('\n');
+      expect(lines, contains('canvas 1920 1080'));
+      expect(lines, contains('fps 30 1'));
+      final fx = lines.where((l) => l.startsWith('effect ')).toList();
+      expect(fx, [
+        'effect c1 brightness amount=0.250000',
+        'effect c1 vignette amount=0.500000,size=0.750000,softness=0.450000',
+      ], reason: 'disabled and unknown effects are left out; defaults are written out');
+      expect(lines, contains('vfade c2 0 $tps'));
+      expect(lines, contains('transition c2 wipe ${tps ~/ 2} ${tps ~/ 2} up'));
+      // Effect and transition lines come after every clip (they name clips).
+      expect(lines.indexWhere((l) => l.startsWith('effect ')), greaterThan(lines.lastIndexWhere((l) => l.startsWith('clip '))));
+      expect(plan.text, isNot(contains('preview ')), reason: 'the export never limits the picture size');
+      expect(buildTimelinePlan(styled(), uris, hardware: false, previewHeight: 360).text, contains('preview 360\n'));
+    });
+
+    test('a transition whose clip is not in the plan is left out', () {
+      final plan = buildTimelinePlan(styled(), {'mute': '/v/silent.mp4'}, hardware: false);
+      expect(plan.text, isNot(contains('transition ')), reason: 'c1 (fd media) is missing');
+      expect(plan.text, isNot(contains('effect c1')));
+    });
+
+    test('effect edits are single undo steps; a slider drag is one step', () async {
+      final store = ProjectStore(MemoryBackend());
+      final c = EditorController(project: styled(), store: store, media: FakeMediaPlatform());
+      for (final v in [0.3, 0.5, 0.7]) {
+        c.editLive((p) => p.updateEffect('c1', 'x1', params: {'amount': v}));
+      }
+      c.commitLive();
+      expect(effectParam(c.project.find('c1')!.clip.effects.first, 'amount'), 0.7);
+      c.undo();
+      expect(effectParam(c.project.find('c1')!.clip.effects.first, 'amount'), 0.25);
+      c.redo();
+      c.edit((p) => p.removeEffect('c1', 'x1'));
+      expect(c.project.find('c1')!.clip.effects.map((e) => e.id), isNot(contains('x1')));
+      c.undo();
+      expect(c.project.find('c1')!.clip.effects.first.id, 'x1');
+      c.edit((p) => p.setTransition('c2', null));
+      expect(buildTimelinePlan(c.project, uris, hardware: false).text, isNot(contains('transition ')));
+      c.undo();
+      expect(buildTimelinePlan(c.project, uris, hardware: false).text, contains('transition c2 wipe'));
+      // Saved and read back: the plan is the same.
+      final before = buildTimelinePlan(c.project, uris, hardware: false).text;
+      final reread = const ProjectCodec().decode(const ProjectCodec().encode(c.project));
+      expect(buildTimelinePlan(reread, uris, hardware: false).text, before);
+      c.dispose();
+    });
+  });
 }

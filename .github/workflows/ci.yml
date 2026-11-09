@@ -158,7 +158,7 @@ jobs:
           CUTLAB_UNDER_VALGRIND=1 CUTLAB_TEST_MEDIA=$PWD/$T $VG build/core-vg/cutlab_timeline_tests
           mkdir -p "${{ runner.temp }}/vg-out"
           CUTLAB_EXPORT_CODEC=mpeg4 CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_export_tests --quick
-          CUTLAB_EXPORT_CODEC=mpeg4 CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_effects_tests --quick
+          CUTLAB_UNDER_VALGRIND=1 CUTLAB_EXPORT_CODEC=mpeg4 CUTLAB_TEST_MEDIA=$PWD/$T CUTLAB_TEST_OUT="${{ runner.temp }}/vg-out" $VG build/core-vg/cutlab_effects_tests --quick
       - name: Timeline benchmark (Linux)
         run: build/core/cutlab_bench_timeline build/test-media build/android-media
       - name: Effects benchmark (Linux, ms per frame at 1080p/1440p/4K)
@@ -261,6 +261,8 @@ jobs:
           flutter test integration_test/timeline_playback_test.dart -d windows --reporter expanded
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           flutter test integration_test/export_test.dart -d windows --reporter expanded
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter test integration_test/effects_test.dart -d windows --reporter expanded
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   dart-packages:

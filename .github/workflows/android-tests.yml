@@ -96,7 +96,7 @@ jobs:
     name: Emulator API ${{ matrix.api }}
     needs: engine
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -176,7 +176,7 @@ jobs:
       - name: Results
         if: always()
         run: |
-          grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|EXPORT-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
+          grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|EXPORT-REPORT\|EFFECTS-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
           sed -n '/NATIVE-TEST export-bench: start/,/NATIVE-TEST export-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           sed -n '/NATIVE-TEST bench: start/,/NATIVE-TEST bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           sed -n '/NATIVE-TEST effects: start/,/NATIVE-TEST effects-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true

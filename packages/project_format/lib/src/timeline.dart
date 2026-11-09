@@ -6,6 +6,7 @@
 /// locked tracks are never modified.
 library;
 
+import 'effects.dart';
 import 'model.dart';
 import 'time.dart';
 
@@ -415,6 +416,8 @@ extension TimelineEdits on Project {
           sourceInTicks: g.clip.sourceInTicks + mulDiv(d, g.clip.speed.num, g.clip.speed.den),
           fadeInTicks: g.clip.fadeInTicks.clamp(0, g.clip.durationTicks - d),
           fadeOutTicks: g.clip.fadeOutTicks.clamp(0, g.clip.durationTicks - d),
+          videoFadeInTicks: g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks - d),
+          videoFadeOutTicks: (g.clip.videoFadeOutTicks).clamp(0, g.clip.durationTicks - d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks - d)),
         ),
     });
   }
@@ -455,6 +458,8 @@ extension TimelineEdits on Project {
           durationTicks: g.clip.durationTicks + d,
           fadeInTicks: g.clip.fadeInTicks.clamp(0, g.clip.durationTicks + d),
           fadeOutTicks: g.clip.fadeOutTicks.clamp(0, g.clip.durationTicks + d),
+          videoFadeInTicks: g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks + d),
+          videoFadeOutTicks: g.clip.videoFadeOutTicks.clamp(0, g.clip.durationTicks + d - g.clip.videoFadeInTicks.clamp(0, g.clip.durationTicks + d)),
         ),
     });
   }
@@ -524,6 +529,8 @@ extension TimelineEdits on Project {
             durationTicks: leftDur,
             fadeOutTicks: 0,
             fadeInTicks: c.fadeInTicks.clamp(0, leftDur),
+            videoFadeOutTicks: 0,
+            videoFadeInTicks: c.videoFadeInTicks.clamp(0, leftDur),
             keyframes: _keyframesBefore(c.keyframes, leftDur),
           ))
           ..add(c.copyWith(
@@ -533,6 +540,8 @@ extension TimelineEdits on Project {
             sourceInTicks: c.sourceInTicks + mulDiv(leftDur, c.speed.num, c.speed.den),
             fadeInTicks: 0,
             fadeOutTicks: c.fadeOutTicks.clamp(0, rightDur),
+            videoFadeInTicks: 0,
+            videoFadeOutTicks: c.videoFadeOutTicks.clamp(0, rightDur),
             linkId: link,
             transitionIn: null,
             keyframes: _keyframesFrom(c.keyframes, leftDur),
@@ -721,6 +730,154 @@ extension TimelineEdits on Project {
     return _replaceClips({
       clipId: pc.clip.copyWith(data: {...pc.clip.data, 'text': text})
     });
+  }
+
+  // ---------------------------------------------- effects and transitions
+
+  PlacedClip _visualClip(String clipId) {
+    final pc = find(clipId);
+    if (pc == null) throw const EditException('Clip not found');
+    if (pc.track.kind != TrackKind.video && pc.track.kind != TrackKind.image) {
+      throw const EditException('Effects apply to video and photo clips');
+    }
+    _checkUnlocked(pc.track);
+    return pc;
+  }
+
+  Effect _checked(Effect e) {
+    final spec = effectSpec(e.type);
+    if (spec == null) return e; // unknown (newer) types are kept as they are
+    return e.copyWith(params: {
+      ...e.params,
+      for (final prm in spec.params)
+        if (e.params[prm.name] is num) prm.name: prm.clamp((e.params[prm.name]! as num).toDouble()),
+    });
+  }
+
+  /// Adds effects at the end of the clip's stack (or at [index]).
+  Project addEffects(String clipId, List<Effect> effects, {int? index}) {
+    final pc = _visualClip(clipId);
+    final list = [...pc.clip.effects];
+    final at = (index ?? list.length).clamp(0, list.length);
+    list.insertAll(at, effects.map(_checked));
+    return _replaceClips({clipId: pc.clip.copyWith(effects: list)});
+  }
+
+  /// Replaces the whole stack (looks / presets, reset).
+  Project setEffects(String clipId, List<Effect> effects) {
+    final pc = _visualClip(clipId);
+    return _replaceClips({clipId: pc.clip.copyWith(effects: effects.map(_checked).toList())});
+  }
+
+  /// Changes parameter values (merged into the existing ones, clamped to
+  /// their range) and/or switches the effect on or off.
+  Project updateEffect(String clipId, String effectId, {Map<String, double>? params, bool? enabled}) {
+    final pc = _visualClip(clipId);
+    final i = pc.clip.effects.indexWhere((e) => e.id == effectId);
+    if (i < 0) throw const EditException('Effect not found');
+    final e = pc.clip.effects[i];
+    final next = _checked(e.copyWith(enabled: enabled, params: params == null ? null : {...e.params, ...params}));
+    final list = [...pc.clip.effects]..[i] = next;
+    return _replaceClips({clipId: pc.clip.copyWith(effects: list)});
+  }
+
+  Project removeEffect(String clipId, String effectId) {
+    final pc = _visualClip(clipId);
+    return _replaceClips({clipId: pc.clip.copyWith(effects: [for (final e in pc.clip.effects) if (e.id != effectId) e])});
+  }
+
+  /// Moves an effect to [newIndex] in the stack (effects apply top to bottom).
+  Project moveEffect(String clipId, String effectId, int newIndex) {
+    final pc = _visualClip(clipId);
+    final list = [...pc.clip.effects];
+    final i = list.indexWhere((e) => e.id == effectId);
+    if (i < 0) throw const EditException('Effect not found');
+    final e = list.removeAt(i);
+    list.insert(newIndex.clamp(0, list.length), e);
+    return _replaceClips({clipId: pc.clip.copyWith(effects: list)});
+  }
+
+  /// Copies [fromClipId]'s effects onto other clips (fresh effect ids).
+  Project copyEffects(String fromClipId, Iterable<String> toClipIds, IdGenerator ids) {
+    final src = _visualClip(fromClipId).clip.effects;
+    var p = this;
+    for (final id in toClipIds) {
+      if (id == fromClipId) continue;
+      final pc = find(id);
+      if (pc == null || (pc.track.kind != TrackKind.video && pc.track.kind != TrackKind.image)) continue;
+      p = p.setEffects(id, [for (final e in src) Effect(id: ids(), type: e.type, enabled: e.enabled, params: e.params)]);
+    }
+    return p;
+  }
+
+  /// Picture fades from/to black, snapped to frames and fitted in the clip.
+  Project setVideoFades(String clipId, {int? fadeInTicks, int? fadeOutTicks}) {
+    final pc = _visualClip(clipId);
+    final c = pc.clip;
+    var fi = quantize(fadeInTicks ?? c.videoFadeInTicks).clamp(0, c.durationTicks);
+    var fo = quantize(fadeOutTicks ?? c.videoFadeOutTicks).clamp(0, c.durationTicks);
+    if (fi + fo > c.durationTicks) {
+      if (fadeInTicks != null) {
+        fo = c.durationTicks - fi;
+      } else {
+        fi = c.durationTicks - fo;
+      }
+    }
+    return _replaceClips({c.id: c.copyWith(videoFadeInTicks: fi, videoFadeOutTicks: fo)});
+  }
+
+  /// The clip just before [clipId] on its track, when it ends exactly where
+  /// [clipId] starts (a transition needs that cut).
+  Clip? clipBefore(String clipId) {
+    final pc = find(clipId);
+    if (pc == null) return null;
+    final i = pc.track.clips.indexWhere((c) => c.id == clipId);
+    if (i <= 0) return null;
+    final a = pc.track.clips[i - 1];
+    return a.endTicks == pc.clip.startTicks ? a : null;
+  }
+
+  /// The clip just after [clipId] on its track, starting exactly at its end.
+  Clip? clipAfter(String clipId) {
+    final pc = find(clipId);
+    if (pc == null) return null;
+    final i = pc.track.clips.indexWhere((c) => c.id == clipId);
+    if (i < 0 || i + 1 >= pc.track.clips.length) return null;
+    final b = pc.track.clips[i + 1];
+    return b.startTicks == pc.clip.endTicks ? b : null;
+  }
+
+  /// How the transition into [clipId] plays (null: none plays).
+  TransitionSpan? transitionInto(String clipId) {
+    final pc = find(clipId);
+    if (pc == null) return null;
+    return transitionSpan(this, pc.track, pc.track.clips.indexWhere((c) => c.id == clipId));
+  }
+
+  /// Sets (or with null removes) the transition from the previous clip into
+  /// [clipId]. The duration is snapped to frames: at least two frames, at
+  /// most what the two clips allow ([maxTransitionTicks]).
+  Project setTransition(String clipId, Transition? transition) {
+    final pc = _visualClip(clipId);
+    if (transition == null) {
+      if (pc.clip.transitionIn == null) return this;
+      return _replaceClips({clipId: pc.clip.copyWith(transitionIn: null)});
+    }
+    if (clipBefore(clipId) == null) throw const EditException('A transition needs a clip right before this one on the same track');
+    final spec = transitionSpec(transition.type);
+    if (spec == null) throw EditException('Unknown transition "${transition.type}"');
+    if (!transitionDirections.contains(transition.direction)) throw EditException('Unknown direction "${transition.direction}"');
+    final i = pc.track.clips.indexWhere((c) => c.id == clipId);
+    final max = maxTransitionTicks(this, pc.track, i, spec.type);
+    if (max < 2 * frameTicks) {
+      throw EditException(spec.overlaps
+          ? 'Not enough media beyond the cut for a ${spec.label.toLowerCase()}: trim the clips or use a dip'
+          : 'The clips are too short for a transition');
+    }
+    var d = quantize(transition.durationTicks);
+    if (d < 2 * frameTicks) d = 2 * frameTicks;
+    if (d > max) d = quantizeDown(max);
+    return _replaceClips({clipId: pc.clip.copyWith(transitionIn: Transition(type: spec.type, durationTicks: d, direction: transition.direction))});
   }
 
   // --------------------------------------------------------------- tracks

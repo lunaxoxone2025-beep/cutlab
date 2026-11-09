@@ -31,6 +31,7 @@ class TimelinePlayback extends ChangeNotifier {
     _lifecycle = AppLifecycleListener(onHide: pause);
     controller.addListener(_projectChanged);
     state.addListener(_stateChanged);
+    settings.addListener(_projectChanged); // preview quality
     _lastPreview = state.preview;
     _scheduleSync();
   }
@@ -172,7 +173,9 @@ class TimelinePlayback extends ChangeNotifier {
     }
     final hardware = settings.value.hardwareDecoding && await hardwareDecodingAllowed(p);
     if (gen != _syncGeneration || _disposed) return;
-    final plan = buildTimelinePlan(p, uris, hardware: hardware);
+    // Fast effects preview: composed pictures at a lower size while editing
+    // (the export always composes at the output size).
+    final plan = buildTimelinePlan(p, uris, hardware: hardware, previewHeight: settings.value.fastEffectsPreview ? fastPreviewHeight : 0);
     if (plan.text == _planText) return;
     try {
       r.setPlan(plan.text);
@@ -224,9 +227,14 @@ class TimelinePlayback extends ChangeNotifier {
               final f = line.split(' ');
               return [f[1], f[2], f[3], f[4], f[9], ...f.skip(11)].join(' ');
             }()
-          else if (line.startsWith('hardware'))
+          else if (line.startsWith('hardware') || _styleLine(line))
             line,
       ].join('\n');
+
+  static bool _styleLine(String line) => const ['canvas ', 'fps ', 'preview ', 'effect ', 'vfade ', 'transition '].any(line.startsWith);
+
+  /// Picture height of the fast effects preview.
+  static const fastPreviewHeight = 360;
 
   // ---------------------------------------------------------------- ticks
 
@@ -340,6 +348,7 @@ class TimelinePlayback extends ChangeNotifier {
     _lifecycle.dispose();
     controller.removeListener(_projectChanged);
     state.removeListener(_stateChanged);
+    settings.removeListener(_projectChanged);
     _ticker.dispose();
     _r?.dispose();
     _r = null;

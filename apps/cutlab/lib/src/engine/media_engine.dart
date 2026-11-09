@@ -471,6 +471,15 @@ abstract class MediaEngine {
   /// Encoders in this build (probe: test-encode with the hardware ones).
   Future<List<EncoderInfo>> encoders({bool probe = false}) async => const [];
 
+  /// The composed picture of [plan] at [ticks] (effects, video fades and
+  /// transitions, no titles) at [width] x [height], exactly as the export
+  /// renders it before encoding. For checks and tests.
+  Future<RgbaImage> renderFrame(String plan, int ticks, int width, int height) async =>
+      throw MediaEngineException(info.reason ?? 'The media engine is not available.');
+
+  /// The engine's effect catalogue as JSON (cutlab_effect_catalog).
+  String effectCatalogJson() => throw MediaEngineException(info.reason ?? 'The media engine is not available.');
+
   /// Starts rendering [plan] (docs/PLAYBACK.md + export lines) with
   /// [settings] (docs/EXPORT.md) in the background.
   ExportJob startExport(String plan, String settings) => throw MediaEngineException(info.reason ?? 'The media engine is not available.');

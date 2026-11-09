@@ -560,7 +560,8 @@ void test_preview_matches() {
   const std::string st = js ? js : "";
   cutlab_free(js);
   std::printf("preview across a transition: %d pictures in 1.5 s, stats %s\n", shown, st.c_str());
-  CHECK(shown >= 30);
+  // (Under valgrind everything runs ~50x slower: only a few pictures.)
+  CHECK(shown >= (std::getenv("CUTLAB_UNDER_VALGRIND") ? 3 : 30));
   CHECK(black == 0);
   CHECK(forward);
   CHECK(str(st, "videoError").empty());

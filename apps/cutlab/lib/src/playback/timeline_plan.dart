@@ -19,17 +19,31 @@ class TimelinePlan {
 /// Text tracks are not part of the plan: titles are drawn by the monitor.
 /// Clip speed and reverse are not supported yet: such clips play at normal
 /// speed (the editor has no control for them yet).
-TimelinePlan buildTimelinePlan(Project p, Map<String, String> engineUris, {required bool hardware}) {
+///
+/// Effects (enabled ones of known types, in stack order), video fades and
+/// transitions go into the plan exactly as the export renders them; the
+/// engine composes the same picture for the preview and the file.
+/// [previewHeight] (preview quality) limits the preview picture only; 0 =
+/// the player's own size. The export passes 0.
+TimelinePlan buildTimelinePlan(Project p, Map<String, String> engineUris, {required bool hardware, int previewHeight = 0}) {
+  final fps = p.settings.frameRate;
   final b = StringBuffer('cutlab-timeline 1\n')
     ..writeln('master ${_num(p.masterVolume)}')
-    ..writeln('hardware ${hardware ? 1 : 0}');
+    ..writeln('hardware ${hardware ? 1 : 0}')
+    ..writeln('canvas ${p.settings.width} ${p.settings.height}')
+    ..writeln('fps ${fps.num} ${fps.den}');
+  if (previewHeight > 0) b.writeln('preview $previewHeight');
   final ids = <String>[];
+  final styling = StringBuffer();
   var clips = 0;
   for (final t in p.tracks) {
     if (t.kind == TrackKind.text) continue;
     ids.add(t.id);
     b.writeln('track ${_token(t.id)} ${t.kind.name} ${_bit(t.muted)} ${_bit(t.solo)} ${_bit(t.hidden)} ${_num(t.volume)}');
-    for (final c in t.clips) {
+    final visual = t.kind == TrackKind.video || t.kind == TrackKind.image;
+    final written = <String>{};
+    for (var i = 0; i < t.clips.length; i++) {
+      final c = t.clips[i];
       final m = c.mediaId == null ? null : p.mediaById(c.mediaId);
       final uri = m == null ? null : engineUris[m.id];
       if (m == null || uri == null || c.durationTicks <= 0) continue;
@@ -41,9 +55,25 @@ TimelinePlan buildTimelinePlan(Project p, Map<String, String> engineUris, {requi
       };
       b.writeln('clip ${_token(c.id)} ${c.startTicks} ${c.durationTicks} ${still ? 0 : c.sourceInTicks} ${_num(c.volume)} '
           '${c.fadeInTicks} ${c.fadeOutTicks} ${_bit(audio)} ${_bit(still)} 1 ${_line(uri)}');
+      written.add(c.id);
       clips++;
+      if (!visual) continue;
+      for (final e in c.effects) {
+        if (!effectRenders(e)) continue;
+        final spec = effectSpec(e.type)!;
+        styling.writeln('effect ${_token(c.id)} ${e.type} ${[for (final prm in spec.params) '${prm.name}=${effectParam(e, prm.name).toStringAsFixed(6)}'].join(',')}');
+      }
+      if (c.videoFadeInTicks > 0 || c.videoFadeOutTicks > 0) {
+        styling.writeln('vfade ${_token(c.id)} ${c.videoFadeInTicks} ${c.videoFadeOutTicks}');
+      }
+      // Both clips of a transition must be in the plan.
+      final span = transitionSpan(p, t, i);
+      if (span != null && span.active && written.contains(t.clips[i - 1].id)) {
+        styling.writeln('transition ${_token(c.id)} ${span.spec.type} ${span.left} ${span.right} ${span.direction}');
+      }
     }
   }
+  b.write(styling);
   return TimelinePlan(b.toString(), ids, clips);
 }
 

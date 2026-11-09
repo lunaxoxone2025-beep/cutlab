@@ -214,21 +214,44 @@ class Effect {
 
   const Effect({required this.id, required this.type, this.enabled = true, this.params = const {}});
 
+  Effect copyWith({bool? enabled, Map<String, Object?>? params}) =>
+      Effect(id: id, type: type, enabled: enabled ?? this.enabled, params: params ?? this.params);
+
   Map<String, Object?> toJson() => {'id': id, 'type': type, 'enabled': enabled, 'params': params};
 
   static Effect fromReader(JsonReader r) =>
       Effect(id: r.string('id'), type: r.string('type'), enabled: r.boolean('enabled', fallback: true), params: r.plainMap('params'));
 }
 
+/// A transition from the previous clip on the same track into this one,
+/// centred on the cut (see effects.dart for the types and how the duration
+/// is shared between the two clips).
 class Transition {
   final String type;
   final int durationTicks;
 
-  const Transition({required this.type, required this.durationTicks});
+  /// For wipes and slides: "left", "right", "up" or "down".
+  final String direction;
 
-  Map<String, Object?> toJson() => {'type': type, 'durationTicks': durationTicks};
+  const Transition({required this.type, required this.durationTicks, this.direction = 'left'});
 
-  static Transition fromReader(JsonReader r) => Transition(type: r.string('type'), durationTicks: r.integer('durationTicks', min: 1));
+  Transition copyWith({String? type, int? durationTicks, String? direction}) =>
+      Transition(type: type ?? this.type, durationTicks: durationTicks ?? this.durationTicks, direction: direction ?? this.direction);
+
+  Map<String, Object?> toJson() => {'type': type, 'durationTicks': durationTicks, if (direction != 'left') 'direction': direction};
+
+  static Transition fromReader(JsonReader r) => Transition(
+        type: r.string('type'),
+        durationTicks: r.integer('durationTicks', min: 1),
+        direction: r.string('direction', fallback: 'left'),
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is Transition && other.type == type && other.durationTicks == durationTicks && other.direction == direction;
+
+  @override
+  int get hashCode => Object.hash(type, durationTicks, direction);
 }
 
 const Object _unset = Object();
@@ -253,6 +276,10 @@ class Clip {
   final int fadeInTicks;
   final int fadeOutTicks;
 
+  /// Picture fades from / to black at the clip edges (timeline ticks).
+  final int videoFadeInTicks;
+  final int videoFadeOutTicks;
+
   /// Clips sharing a link id (a video and its detached audio) move, trim,
   /// split and delete together.
   final String? linkId;
@@ -276,6 +303,8 @@ class Clip {
     this.volume = 1.0,
     this.fadeInTicks = 0,
     this.fadeOutTicks = 0,
+    this.videoFadeInTicks = 0,
+    this.videoFadeOutTicks = 0,
     this.linkId,
     this.effects = const [],
     this.transitionIn,
@@ -298,6 +327,8 @@ class Clip {
     double? volume,
     int? fadeInTicks,
     int? fadeOutTicks,
+    int? videoFadeInTicks,
+    int? videoFadeOutTicks,
     Object? linkId = _unset,
     List<Effect>? effects,
     Object? transitionIn = _unset,
@@ -315,6 +346,8 @@ class Clip {
         volume: volume ?? this.volume,
         fadeInTicks: fadeInTicks ?? this.fadeInTicks,
         fadeOutTicks: fadeOutTicks ?? this.fadeOutTicks,
+        videoFadeInTicks: videoFadeInTicks ?? this.videoFadeInTicks,
+        videoFadeOutTicks: videoFadeOutTicks ?? this.videoFadeOutTicks,
         linkId: identical(linkId, _unset) ? this.linkId : linkId as String?,
         effects: effects ?? this.effects,
         transitionIn: identical(transitionIn, _unset) ? this.transitionIn : transitionIn as Transition?,
@@ -333,6 +366,8 @@ class Clip {
         'volume': volume,
         if (fadeInTicks > 0) 'fadeInTicks': fadeInTicks,
         if (fadeOutTicks > 0) 'fadeOutTicks': fadeOutTicks,
+        if (videoFadeInTicks > 0) 'videoFadeInTicks': videoFadeInTicks,
+        if (videoFadeOutTicks > 0) 'videoFadeOutTicks': videoFadeOutTicks,
         if (linkId != null) 'linkId': linkId,
         'effects': [for (final e in effects) e.toJson()],
         if (transitionIn != null) 'transitionIn': transitionIn!.toJson(),
@@ -364,6 +399,8 @@ class Clip {
       volume: r.number('volume', fallback: 1.0),
       fadeInTicks: r.integer('fadeInTicks', fallback: 0, min: 0),
       fadeOutTicks: r.integer('fadeOutTicks', fallback: 0, min: 0),
+      videoFadeInTicks: r.integer('videoFadeInTicks', fallback: 0, min: 0),
+      videoFadeOutTicks: r.integer('videoFadeOutTicks', fallback: 0, min: 0),
       linkId: r.optString('linkId'),
       effects: r.list('effects', Effect.fromReader),
       transitionIn: r.has('transitionIn') ? Transition.fromReader(r.object('transitionIn')) : null,

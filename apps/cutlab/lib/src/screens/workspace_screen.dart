@@ -18,6 +18,7 @@ import '../media/media_platform.dart';
 import '../storage/app_settings.dart';
 import '../theme.dart';
 import '../timeline/clip_inspector.dart';
+import '../timeline/effects_panel.dart';
 import '../playback/timeline_playback.dart';
 import '../timeline/mixer_panel.dart';
 import '../timeline/program_monitor.dart';
@@ -36,7 +37,7 @@ const double kDesktopBreakpoint = 1000;
 
 enum _Monitor { program, source }
 
-enum _Side { inspector, mixer }
+enum _Side { inspector, effects, mixer }
 
 /// The editing workspace for one project.
 class WorkspaceScreen extends StatefulWidget {
@@ -169,6 +170,24 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   Future<void> _addText() async {
     final text = await promptText(context, title: 'Add text', initial: 'Title');
     if (text != null && text.trim().isNotEmpty) _actions.addText(text.trim());
+  }
+
+  /// Effects, looks and transitions of the selected clip: the side panel on
+  /// desktop, a sheet on phones.
+  void _effects() {
+    if (MediaQuery.sizeOf(context).width >= kDesktopBreakpoint) {
+      setState(() => _side = _Side.effects);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.6,
+        child: EffectsPanel(controller: c, state: _tl, actions: _actions),
+      ),
+    );
   }
 
   void _clipSettings() {
@@ -423,6 +442,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               actions: _actions,
               onAddText: _addText,
               onClipSettings: _clipSettings,
+              onEffects: _effects,
               viewportWidth: _timelineWidth,
             ),
             Expanded(
@@ -437,7 +457,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 },
                 builder: (context, candidate, _) => DecoratedBox(
                   decoration: BoxDecoration(border: candidate.isEmpty ? null : Border.all(color: CutlabColors.accent, width: 2)),
-                  child: TimelineView(controller: c, state: _tl, assets: _assets),
+                  child: TimelineView(controller: c, state: _tl, assets: _assets, onTransitionTap: (_) => _effects()),
                 ),
               ),
             ),
@@ -474,6 +494,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             style: const ButtonStyle(visualDensity: VisualDensity.compact),
                             segments: const [
                               ButtonSegment(value: _Side.inspector, label: Text('Inspector')),
+                              ButtonSegment(value: _Side.effects, label: Text('Effects')),
                               ButtonSegment(value: _Side.mixer, label: Text('Mixer')),
                             ],
                             selected: {_side},
@@ -483,7 +504,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                         Expanded(
                           child: _side == _Side.mixer
                               ? MixerPanel(controller: c, playback: _playback)
-                              : ListenableBuilder(
+                              : _side == _Side.effects
+                                  ? _Panel(title: 'Effects', child: EffectsPanel(controller: c, state: _tl, actions: _actions))
+                                  : ListenableBuilder(
                                   listenable: _tl,
                                   builder: (context, _) => _tl.selection.isEmpty
                                       ? _Panel(title: 'Project', child: _ProjectPanel(controller: c, showMode: false))

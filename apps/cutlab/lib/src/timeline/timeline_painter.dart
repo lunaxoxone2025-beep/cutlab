@@ -12,6 +12,17 @@ import 'timeline_state.dart';
 
 const double handleWidth = 12;
 
+/// Height of the transition bar drawn at the bottom of a clip lane.
+const double transitionBarHeight = 16;
+
+/// Where the transition bar of a cut is drawn (lane-relative top [top]).
+Rect transitionBar(TimelineState s, TrackRow r, double top, TransitionSpan span, int cut) {
+  final x0 = s.xOf(cut - span.left), x1 = s.xOf(cut + span.right);
+  final w = math.max(10.0, x1 - x0);
+  final cx = (x0 + x1) / 2;
+  return Rect.fromLTRB(cx - w / 2, top + r.height - transitionBarHeight - 2, cx + w / 2, top + r.height - 2);
+}
+
 /// Draws the ruler, all track lanes, the visible clips (with thumbnails or
 /// waveforms), selection, trim handles, snap guide and playhead in one pass.
 /// Only clips intersecting the visible time range are drawn, so long
@@ -50,6 +61,12 @@ class TimelinePainter extends CustomPainter {
       for (final c in r.track.clips) {
         if (c.endTicks < t0 || c.startTicks > t1) continue;
         _paintClip(canvas, size, p, r, top, c);
+      }
+      for (var i = 1; i < r.track.clips.length; i++) {
+        final cut = r.track.clips[i].startTicks;
+        if (cut < t0 - ticksPerSecond * 10 || cut > t1 + ticksPerSecond * 10) continue;
+        final span = transitionSpan(p, r.track, i);
+        if (span != null) _paintTransition(canvas, r, top, span, cut, selected: state.selection.contains(r.track.clips[i].id));
       }
     }
     canvas.restore();
@@ -116,10 +133,12 @@ class TimelinePainter extends CustomPainter {
       }
     }
     _paintFades(canvas, rect, c);
+    if (r.track.kind == TrackKind.video || r.track.kind == TrackKind.image) _paintVideoFades(canvas, rect, c);
 
     // Label.
     final label = m?.displayName ?? (c.data['text'] as String? ?? 'Text');
-    final link = c.linkId != null ? '\u{1F517} ' : '';
+    final fx = c.effects.where(effectRenders).length;
+    final link = '${fx > 0 ? 'fx$fx ' : ''}${c.linkId != null ? '\u{1F517} ' : ''}';
     final vol =
         (r.track.kind == TrackKind.audio || r.track.kind == TrackKind.video) && c.volume != 1.0 ? '  ${(c.volume * 100).round()}%' : '';
     final tp = TextPainter(
@@ -234,6 +253,47 @@ class TimelinePainter extends CustomPainter {
             ..close(),
           paint);
     }
+  }
+
+  /// Picture fades: lighter wedges along the top edge.
+  void _paintVideoFades(Canvas canvas, Rect rect, pf.Clip c) {
+    final paint = Paint()..color = Colors.black.withAlpha(150);
+    final h = rect.height * 0.45;
+    if (c.videoFadeInTicks > 0) {
+      final w = c.videoFadeInTicks / ticksPerSecond * state.pxPerSec;
+      canvas.drawPath(Path()..moveTo(rect.left, rect.top)..lineTo(rect.left + w, rect.top)..lineTo(rect.left, rect.top + h)..close(), paint);
+    }
+    if (c.videoFadeOutTicks > 0) {
+      final w = c.videoFadeOutTicks / ticksPerSecond * state.pxPerSec;
+      canvas.drawPath(Path()..moveTo(rect.right, rect.top)..lineTo(rect.right - w, rect.top)..lineTo(rect.right, rect.top + h)..close(), paint);
+    }
+  }
+
+  /// A transition: a bar across the cut, as long as it plays, with a bow-tie
+  /// at the cut and grips at both ends (drag them to change the length).
+  void _paintTransition(Canvas canvas, TrackRow r, double top, TransitionSpan span, int cut, {required bool selected}) {
+    final bar = transitionBar(state, r, top, span, cut);
+    final rr = RRect.fromRectAndRadius(bar, const Radius.circular(4));
+    final active = span.active;
+    canvas.drawRRect(rr, Paint()..color = (active ? CutlabColors.accent : CutlabColors.danger).withAlpha(selected ? 210 : 150));
+    canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = Colors.black.withAlpha(140));
+    final cx = state.xOf(cut), cy = bar.center.dy, h = bar.height / 2 - 3;
+    canvas.drawPath(
+        Path()
+          ..moveTo(cx - h, cy - h)
+          ..lineTo(cx + h, cy + h)
+          ..lineTo(cx + h, cy - h)
+          ..lineTo(cx - h, cy + h)
+          ..close(),
+        Paint()..color = CutlabColors.onAccent);
+    final grip = Paint()..color = Colors.white;
+    canvas.drawRect(Rect.fromLTWH(bar.left, bar.top + 2, 3, bar.height - 4), grip);
+    canvas.drawRect(Rect.fromLTWH(bar.right - 3, bar.top + 2, 3, bar.height - 4), grip);
   }
 
   void _paintRuler(Canvas canvas, Size size, int t0, int t1) {
