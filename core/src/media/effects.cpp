@@ -14,7 +14,9 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <memory>
 #include <sstream>
 
 namespace cutlab::media {
@@ -434,72 +436,256 @@ std::vector<Step> build_steps(const std::vector<TlEffect>& fx, size_t from, size
 
 inline float lut(const std::vector<float>& t, float v) { return t[static_cast<int>(v * (kLut - 1) + 0.5f)]; }
 
-void run_steps(const std::vector<Step>& steps, Rgba img, int x0, int y0, int w, int h) {
-  if (steps.empty()) return;
-  // Only per-channel adjustments: 8-bit tables, the fast path.
-  if (steps.size() == 1 && steps[0].kind == Step::lut) {
-    std::array<std::array<uint8_t, 256>, 3> t8;
-    for (int ch = 0; ch < 3; ++ch)
-      for (int k = 0; k < 256; ++k) t8[ch][k] = static_cast<uint8_t>(lut(steps[0].table[ch], k / 255.f) * 255.f + 0.5f);
-    WorkPool::shared().parallel(h, [&](int b, int e) {
-      for (int y = b; y < e; ++y) {
-        uint8_t* p = img.row(y0 + y) + x0 * 4;
-        for (int x = 0; x < w; ++x, p += 4) {
-          p[0] = t8[0][p[0]];
-          p[1] = t8[1][p[1]];
-          p[2] = t8[2][p[2]];
-        }
-      }
-    });
-    return;
+// One colour step on a pixel (every kind but the vignette).
+inline void point(const Step& s, float& r, float& g, float& bl) {
+  switch (s.kind) {
+    case Step::lut:
+      r = lut(s.table[0], r);
+      g = lut(s.table[1], g);
+      bl = lut(s.table[2], bl);
+      break;
+    case Step::matrix: apply_mat(s.m, r, g, bl); break;
+    case Step::vibrance: {
+      const float mx = std::max(r, std::max(g, bl)), mn = std::min(r, std::min(g, bl));
+      const float l = kR * r + kG * g + kB * bl;
+      const float k = 1 + s.a * (1 - (mx - mn));
+      r = clampf(l + (r - l) * k);
+      g = clampf(l + (g - l) * k);
+      bl = clampf(l + (bl - l) * k);
+      break;
+    }
+    case Step::bw: {
+      const float l = kR * r + kG * g + kB * bl;
+      r = g = bl = smooth(s.a - s.b, s.a + s.b, l);
+      break;
+    }
+    case Step::look: apply_look(s.look_index, s.a, r, g, bl); break;
+    case Step::vignette: break;
   }
-  const float cx = w * 0.5f, cy = h * 0.5f;
+}
+
+// A colour chain baked into a 33 x 33 x 33 RGB lookup cube (values x256),
+// read with tetrahedral interpolation: any chain costs the same per pixel.
+constexpr int kCube = 17;
+struct Cube {
+  std::vector<std::array<uint16_t, 3>> node;  // [(r * N + g) * N + b]
+  std::array<int, 256> idx{}, frac{};          // 8-bit value -> cell, weight 0..256
+};
+
+std::shared_ptr<const Cube> bake(const std::vector<Step>& steps) {
+  auto c = std::make_shared<Cube>();
+  c->node.resize(static_cast<size_t>(kCube) * kCube * kCube);
+  for (int i = 0; i < kCube; ++i)
+    for (int j = 0; j < kCube; ++j)
+      for (int k = 0; k < kCube; ++k) {
+        float r = i / float(kCube - 1), g = j / float(kCube - 1), b = k / float(kCube - 1);
+        for (const Step& st : steps) point(st, r, g, b);
+        auto& n = c->node[(static_cast<size_t>(i) * kCube + j) * kCube + k];
+        n = {static_cast<uint16_t>(clampf(r) * 255.f * 256.f + 0.5f), static_cast<uint16_t>(clampf(g) * 255.f * 256.f + 0.5f),
+             static_cast<uint16_t>(clampf(b) * 255.f * 256.f + 0.5f)};
+      }
+  for (int v = 0; v < 256; ++v) {
+    const int f = v * (kCube - 1) * 256 / 255;  // 0 .. (N-1)*256
+    c->idx[v] = std::min(f >> 8, kCube - 2);
+    c->frac[v] = f - c->idx[v] * 256;
+  }
+  return c;
+}
+
+void run_cube(const Cube& c, Rgba img, int x0, int y0, int w, int h) {
+  constexpr int N = kCube;
   WorkPool::shared().parallel(h, [&](int b, int e) {
     for (int y = b; y < e; ++y) {
       uint8_t* p = img.row(y0 + y) + x0 * 4;
-      const float ny = (y + 0.5f - cy) / cy;
       for (int x = 0; x < w; ++x, p += 4) {
-        float r = p[0] / 255.f, g = p[1] / 255.f, bl = p[2] / 255.f;
-        for (const Step& s : steps) {
-          switch (s.kind) {
-            case Step::lut:
-              r = lut(s.table[0], r);
-              g = lut(s.table[1], g);
-              bl = lut(s.table[2], bl);
-              break;
-            case Step::matrix: apply_mat(s.m, r, g, bl); break;
-            case Step::vibrance: {
-              float mx = std::max(r, std::max(g, bl)), mn = std::min(r, std::min(g, bl));
-              float l = kR * r + kG * g + kB * bl;
-              float k = 1 + s.a * (1 - (mx - mn));
-              r = clampf(l + (r - l) * k);
-              g = clampf(l + (g - l) * k);
-              bl = clampf(l + (bl - l) * k);
-              break;
-            }
-            case Step::bw: {
-              float l = kR * r + kG * g + kB * bl;
-              r = g = bl = smooth(s.a - s.b, s.a + s.b, l);
-              break;
-            }
-            case Step::look: apply_look(s.look_index, s.a, r, g, bl); break;
-            case Step::vignette: {
-              float nx = (x + 0.5f - cx) / cx;
-              float d = std::sqrt(nx * nx + ny * ny);
-              float f = 1 - s.a * smooth(s.b, s.b + s.c, d);
-              r *= f;
-              g *= f;
-              bl *= f;
-              break;
-            }
-          }
+        const int i = c.idx[p[0]], j = c.idx[p[1]], k = c.idx[p[2]];
+        const int fr = c.frac[p[0]], fg = c.frac[p[1]], fb = c.frac[p[2]];
+        const auto* n = c.node.data() + (static_cast<size_t>(i) * N + j) * N + k;
+        // Trilinear (no branches: noisy footage would defeat prediction).
+        const int ir = 256 - fr, ig = 256 - fg, ib = 256 - fb;
+        const auto& a0 = n[0];
+        const auto& a1 = n[1];
+        const auto& a2 = n[N];
+        const auto& a3 = n[N + 1];
+        const auto& a4 = n[N * N];
+        const auto& a5 = n[N * N + 1];
+        const auto& a6 = n[N * N + N];
+        const auto& a7 = n[N * N + N + 1];
+        for (int ch = 0; ch < 3; ++ch) {
+          const int g0 = (a0[ch] * ib + a1[ch] * fb) >> 8, g1 = (a2[ch] * ib + a3[ch] * fb) >> 8;
+          const int g2 = (a4[ch] * ib + a5[ch] * fb) >> 8, g3 = (a6[ch] * ib + a7[ch] * fb) >> 8;
+          const int r0 = (g0 * ig + g1 * fg) >> 8, r1 = (g2 * ig + g3 * fg) >> 8;
+          const int v = r0 * ir + r1 * fr;  // x65536
+          p[ch] = static_cast<uint8_t>((v + 32768) >> 16);
         }
-        p[0] = static_cast<uint8_t>(r * 255.f + 0.5f);
-        p[1] = static_cast<uint8_t>(g * 255.f + 0.5f);
-        p[2] = static_cast<uint8_t>(bl * 255.f + 0.5f);
       }
     }
   });
+}
+
+void run_vignette(const Step& s, Rgba img, int x0, int y0, int w, int h) {
+  const float cx = w * 0.5f, cy = h * 0.5f;
+  std::vector<float> nx2(static_cast<size_t>(w));
+  for (int x = 0; x < w; ++x) {
+    const float nx = (x + 0.5f - cx) / cx;
+    nx2[x] = nx * nx;
+  }
+  WorkPool::shared().parallel(h, [&](int b, int e) {
+    for (int y = b; y < e; ++y) {
+      uint8_t* p = img.row(y0 + y) + x0 * 4;
+      const float ny = (y + 0.5f - cy) / cy, ny2 = ny * ny;
+      // Rows wholly inside the clear centre need nothing.
+      if (std::sqrt(ny2) < s.b && std::sqrt(nx2[0] + ny2) < s.b) continue;
+      for (int x = 0; x < w; ++x, p += 4) {
+        const float d = std::sqrt(nx2[x] + ny2);
+        if (d <= s.b) continue;
+        const int k = static_cast<int>((1 - s.a * smooth(s.b, s.b + s.c, d)) * 256 + 0.5f);
+        p[0] = static_cast<uint8_t>((p[0] * k + 128) >> 8);
+        p[1] = static_cast<uint8_t>((p[1] * k + 128) >> 8);
+        p[2] = static_cast<uint8_t>((p[2] * k + 128) >> 8);
+      }
+    }
+  });
+}
+
+// A run of colour effects prepared once (tables, cubes) and reused for
+// every frame while the effects stay the same.
+struct Pass {
+  enum Kind { table, lut3d, direct, matrix, vignette } kind;
+  std::array<int, 12> mi{};  // matrix x1024 (offset x1024*255)
+  std::vector<Step> steps;  // direct
+  std::array<std::array<uint8_t, 256>, 3> t8{};
+  std::shared_ptr<const Cube> cube;
+  Step vig{};
+};
+using Passes = std::vector<Pass>;
+
+Passes prepare(const std::vector<Step>& steps) {
+  Passes out;
+  size_t i = 0;
+  while (i < steps.size()) {
+    if (steps[i].kind == Step::vignette) {
+      Pass p{};
+      p.kind = Pass::vignette;
+      p.vig = steps[i];
+      out.push_back(std::move(p));
+      ++i;
+      continue;
+    }
+    size_t j = i;
+    while (j < steps.size() && steps[j].kind != Step::vignette) ++j;
+    if (j == i + 1 && steps[i].kind == Step::lut) {
+      Pass p{};
+      p.kind = Pass::table;
+      for (int ch = 0; ch < 3; ++ch)
+        for (int k = 0; k < 256; ++k) p.t8[ch][k] = static_cast<uint8_t>(lut(steps[i].table[ch], k / 255.f) * 255.f + 0.5f);
+      out.push_back(std::move(p));
+    } else {
+      // Short chains are computed directly; longer ones (or costly steps
+      // together) are baked into the cube, whose cost does not depend on
+      // the chain (measured: a cube pass ~ two matrix steps).
+      double cost = 0;
+      for (size_t q = i; q < j; ++q) {
+        switch (steps[q].kind) {
+          case Step::lut: cost += 1; break;
+          case Step::matrix: cost += 2; break;
+          case Step::bw: cost += 2.5; break;
+          case Step::vibrance: cost += 3; break;
+          case Step::look: cost += steps[q].look_index == 0 || steps[q].look_index == 3 ? 4.5 : 3; break;
+          case Step::vignette: break;
+        }
+      }
+      Pass p{};
+      if (j == i + 1 && steps[i].kind == Step::matrix) {
+        // One colour matrix: integer arithmetic.
+        p.kind = Pass::matrix;
+        for (int q = 0; q < 12; ++q) p.mi[q] = static_cast<int>(std::lround(steps[i].m[q] * (q % 4 == 3 ? 1024.f * 255.f : 1024.f)));
+      } else if (cost >= 4.5) {
+        p.kind = Pass::lut3d;
+        p.cube = bake(std::vector<Step>(steps.begin() + i, steps.begin() + j));
+      } else {
+        p.kind = Pass::direct;
+        p.steps.assign(steps.begin() + i, steps.begin() + j);
+      }
+      out.push_back(std::move(p));
+    }
+    i = j;
+  }
+  return out;
+}
+
+std::string signature(const std::vector<TlEffect>& fx, size_t from, size_t to) {
+  std::string s;
+  char buf[48];
+  for (size_t i = from; i < to; ++i) {
+    s += fx[i].type;
+    for (const auto& [k, v] : fx[i].params) {
+      std::snprintf(buf, sizeof buf, ",%s=%.9g", k.c_str(), v);
+      s += buf;
+    }
+    s += ';';
+  }
+  return s;
+}
+
+// Prepared passes per calling thread, by effect list (a few clips at a time).
+const Passes& passes_for(const std::vector<TlEffect>& fx, size_t from, size_t to) {
+  thread_local std::map<std::string, Passes> cache;
+  const std::string key = signature(fx, from, to);
+  auto it = cache.find(key);
+  if (it != cache.end()) return it->second;
+  if (cache.size() >= 16) cache.clear();
+  return cache.emplace(key, prepare(build_steps(fx, from, to))).first->second;
+}
+
+void run_passes(const Passes& passes, Rgba img, int x0, int y0, int w, int h) {
+  for (const Pass& p : passes) {
+    switch (p.kind) {
+      case Pass::table:
+        WorkPool::shared().parallel(h, [&](int b, int e) {
+          for (int y = b; y < e; ++y) {
+            uint8_t* q = img.row(y0 + y) + x0 * 4;
+            for (int x = 0; x < w; ++x, q += 4) {
+              q[0] = p.t8[0][q[0]];
+              q[1] = p.t8[1][q[1]];
+              q[2] = p.t8[2][q[2]];
+            }
+          }
+        });
+        break;
+      case Pass::lut3d: run_cube(*p.cube, img, x0, y0, w, h); break;
+      case Pass::matrix:
+        WorkPool::shared().parallel(h, [&](int b, int e) {
+          const auto& m = p.mi;
+          auto c8 = [](int v) { return static_cast<uint8_t>(v < 0 ? 0 : v > 255 * 1024 ? 255 : (v + 512) >> 10); };
+          for (int y = b; y < e; ++y) {
+            uint8_t* q = img.row(y0 + y) + x0 * 4;
+            for (int x = 0; x < w; ++x, q += 4) {
+              const int r = q[0], g = q[1], bl = q[2];
+              q[0] = c8(m[0] * r + m[1] * g + m[2] * bl + m[3]);
+              q[1] = c8(m[4] * r + m[5] * g + m[6] * bl + m[7]);
+              q[2] = c8(m[8] * r + m[9] * g + m[10] * bl + m[11]);
+            }
+          }
+        });
+        break;
+      case Pass::direct:
+        WorkPool::shared().parallel(h, [&](int b, int e) {
+          for (int y = b; y < e; ++y) {
+            uint8_t* q = img.row(y0 + y) + x0 * 4;
+            for (int x = 0; x < w; ++x, q += 4) {
+              float r = q[0] / 255.f, g = q[1] / 255.f, bl = q[2] / 255.f;
+              for (const Step& st : p.steps) point(st, r, g, bl);
+              q[0] = static_cast<uint8_t>(r * 255.f + 0.5f);
+              q[1] = static_cast<uint8_t>(g * 255.f + 0.5f);
+              q[2] = static_cast<uint8_t>(bl * 255.f + 0.5f);
+            }
+          }
+        });
+        break;
+      case Pass::vignette: run_vignette(p.vig, img, x0, y0, w, h); break;
+    }
+  }
 }
 
 // ----------------------------------------------------------------- blur
@@ -657,7 +843,7 @@ void apply_effects(const std::vector<TlEffect>& fx, Rgba img, int x, int y, int 
     if (!spatial(fx[i].type)) {
       size_t j = i;
       while (j < fx.size() && !spatial(fx[j].type)) ++j;
-      run_steps(build_steps(fx, i, j), img, x, y, w, h);
+      run_passes(passes_for(fx, i, j), img, x, y, w, h);
       i = j;
       continue;
     }

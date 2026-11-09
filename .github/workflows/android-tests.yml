@@ -179,7 +179,7 @@ jobs:
           grep -h "PREVIEW-REPORT\|PLAYBACK-REPORT\|EXPORT-REPORT\|EFFECTS-REPORT\|NATIVE-TEST" build/emulator-logs/*.txt 2>/dev/null | head -200 || true
           sed -n '/NATIVE-TEST export-bench: start/,/NATIVE-TEST export-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           sed -n '/NATIVE-TEST bench: start/,/NATIVE-TEST bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
-          sed -n '/NATIVE-TEST effects: start/,/NATIVE-TEST effects-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
+          sed -n '/NATIVE-TEST effects: start/,/NATIVE-TEST effects-export-bench: exit/p' build/emulator-logs/native.txt 2>/dev/null | grep -v "^\[" || true
           echo "--- crashes in logcat ---"
           grep -h -E "F DEBUG|FATAL EXCEPTION|Fatal signal|SIGSEGV|SIGABRT|cutlab-crash" build/emulator-logs/logcat.txt 2>/dev/null | head -80 || true
       - uses: actions/upload-artifact@v4

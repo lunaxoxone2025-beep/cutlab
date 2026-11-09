@@ -76,25 +76,35 @@ Legend: ✅ done and verified in CI · 🔄 in progress · ⬜ planned. A phase 
 - ✅ Android: hardware encoders tested in a separate process, background export (foreground service, wake lock), pause when hot, gallery (Movies/CUTLAB); Windows: save dialog, GPU first, Show file
 - ✅ Tests: native export suite (every picture/sound check against the sources, all formats, sizes, rates, cancel, broken media, 2-hour export) + independent ffprobe check of every file, Dart/widget tests, integration tests in the real app on Android emulators and Windows
 - ➡️ Not in this phase: resuming an export after the app was closed, compositing/effects/transitions (Phases 7–8), HDR tone mapping, export history list
-- ⚠️ Not yet measured on the owner's phone and PC (encoders, speed, heat)
+- ⚠️ **Outstanding:** hardware encoder performance and behaviour on physical devices are not verified. CI ran the software encoders, the Windows runner's Media Foundation encoders and the emulators' MediaCodec only; no claim is made about real-phone or real-GPU encoding speed until it is tested on the owner's phone and PC
 
-## Phase 7 — Gaming Studio ⬜
+## Phase 7 — Effects and transitions ✅ (verified in CI, on Android emulators and Windows; owner device check pending)
+
+- ✅ 18 effects with parameters and defaults: brightness, contrast, exposure, gamma, highlights, shadows, saturation, vibrance, temperature, tint, RGB, sharpen, blur, vignette, grayscale, black & white, sepia, colour filter (8 cinematic looks); 10 ready-made looks
+- ✅ Transitions: cross dissolve, dip to black/white, wipe and slide (4 directions), zoom in/out, smooth blur; video fade in/out; equal-power audio cross-fades
+- ✅ One compositor for preview and export (same code, same parameters, from the original media); duration centred on the cut and limited by the media handles (no frozen or black frames)
+- ✅ Editor: beginner (looks, quick sliders, simple transitions) and advanced (full stack, every parameter, reorder, on/off, frame-exact timing) on desktop and phone; transition bars on the timeline (tap to edit, drag to resize); undo/redo; project format v4 (older projects unchanged)
+- ✅ Fast effects preview (export unaffected); effect math on the CPU, multi-threaded (no GPU path yet)
+- ✅ Tests on rendered pictures: every effect and transition, continuity at 24–120 fps, preview = composed picture = exported frame, audio continuity, 2-hour timeline and export with effects, valgrind; Dart/widget tests; integration tests in the real app on Android emulators and Windows
+- ⚠️ Not yet measured on the owner's phone and PC
+
+## Phase 8 — Gaming Studio ⬜
 
 Slow-motion and speed ramps, zoom/shake/flash/impact effects, highlight markers, facecam overlay and split-screen, kill counters/HUD overlays, intro/outro templates, presets per genre (FPS, battle royale, Minecraft, racing, sports, survival) with user-defined presets.
 
-## Phase 8 — Advanced features ⬜
+## Phase 9 — Advanced features ⬜
 
-Color grading (temperature, tint, exposure, highlights/shadows, curves), LUT import, glow/vignette/grain/chromatic aberration, blend modes, PiP, audio EQ/normalization/ducking/noise reduction, SRT/ASS subtitles, optional local AI (subtitles, silence/scene detection).
+Curves, LUT import, glow/grain/chromatic aberration, effect keyframes, blend modes, PiP, audio EQ/normalization/ducking/noise reduction, SRT/ASS subtitles, optional local AI (subtitles, silence/scene detection).
 
-## Phase 9 — Optimization ⬜
+## Phase 10 — Optimization ⬜
 
-Proxy workflow, GPU render backends, memory budgets, hardware capability detection and automatic preview quality, long-form tests (2-hour projects), crash-recovery tests.
+Proxy workflow, GPU render backends (effects and transitions included), memory budgets, hardware capability detection and automatic preview quality, long-form tests (2-hour projects), crash-recovery tests.
 
-## Phase 10 — Personal release ⬜
+## Phase 11 — Personal release ⬜
 
 Final testing on the owner's phone and PC, documentation, stable APK and Windows build. No public release (ARCHITECTURE D14).
 
 ## Exact next step
 
-1. **Owner device check** of Phase 6: export a long COD Mobile / Minecraft recording at 1080p60 (H.264 and HEVC) on the phone and on the PC; note the speed, the encoder used and whether the phone gets hot.
-2. **Phase 7:** Gaming Studio.
+1. **Owner device check** of Phases 6 and 7 (still outstanding: hardware encoders have only run in CI and on emulators): export a long COD Mobile / Minecraft recording at 1080p60 (H.264 and HEVC) on the phone and on the PC, with and without a look and a few transitions; note the speed, the encoder used, whether the preview keeps up, and whether the phone gets hot.
+2. **Phase 8:** Gaming Studio.

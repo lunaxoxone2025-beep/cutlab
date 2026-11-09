@@ -93,6 +93,19 @@ clip <id> <start> <duration> <in-point> <volume> <fade-in> <fade-out> <audio 0|1
 - Tracks are listed bottom to top: later picture tracks cover earlier ones.
 - Text tracks are not sent: titles are drawn by the monitor.
 
+Phase 7 adds (after all clips; they name clips by id):
+
+```
+canvas <width> <height>                           project picture size
+fps <num> <den>                                   project frame rate
+preview <height>                                  optional: fast effects preview size (never sent for an export)
+effect <clip> <type> <name>=<value>,...           enabled effects, in stack order
+vfade <clip> <in> <out>                           picture fades from / to black
+transition <clip> <type> <left> <right> <dir>     from the previous clip; left/right = ticks before/after the cut
+```
+
+A plan with any `effect`, `vfade` or `transition` line is *composed*: the picture goes through the compositor shared with the export (`docs/EFFECTS.md`) on the project frame-rate grid, at the project aspect ratio fitted into the preview size. Plans without them play exactly as before (the direct path below).
+
 ## Tests
 
 | Test | What |
@@ -107,7 +120,7 @@ clip <id> <start> <duration> <in-point> <volume> <fade-in> <fade-out> <audio 0|1
 
 | Item | Status |
 |---|---|
-| Picture compositing | Only the top-most visible picture is shown; there is no blending, picture-in-picture or transparency. Transitions, effects, keyframes and colour work are not rendered yet (they are planned for later phases). |
+| Picture compositing | Only the top-most visible picture is shown (no picture-in-picture or blend modes). Effects, video fades and transitions are rendered since Phase 7 (`docs/EFFECTS.md`); keyframes are not rendered yet. |
 | Clip speed / reverse | Not supported in playback (the editor has no control for them yet); such clips play at normal speed. |
 | Title styling | Titles are plain centred text drawn over the picture (sized with the picture, the same as in exported videos). |
 | Audio while scrubbing | No sound while dragging the cursor; sound only during playback. |

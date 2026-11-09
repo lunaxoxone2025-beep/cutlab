@@ -958,7 +958,22 @@ std::vector<TimelinePlayer::QFrame> TimelinePlayer::comp_next(const TlPlan& plan
   // The next grid frame that differs (a still picture is queued again
   // every 0.25 s so the queue keeps moving).
   for (;;) {
-    const Ticks t = frames_to_ticks(comp_n_, plan.fps);
+    Ticks t = frames_to_ticks(comp_n_, plan.fps);
+    // Behind the clock (a slow device, heavy effects): skip to the frame
+    // due next instead of showing every picture late (keeps A/V sync).
+    if (playing()) {
+      const Ticks frame = frames_to_ticks(1, plan.fps);
+      const Ticks now = position();
+      if (t + 2 * frame < now) {
+        const int64_t n = ticks_to_frames(now + frame, plan.fps);
+        {
+          std::lock_guard<std::mutex> lock(mu_);
+          frames_dropped_ += n - comp_n_;
+        }
+        comp_n_ = n;
+        t = frames_to_ticks(comp_n_, plan.fps);
+      }
+    }
     if (t >= plan.duration) return {};
     ++comp_n_;
     bool black = false;
@@ -1110,6 +1125,10 @@ bool TimelinePlayer::frame(uint64_t* serial, uint8_t* dst, size_t capacity, int*
     if (!need_first && queue_.front().pts > now) break;
     current_ = std::move(queue_.front());
     queue_.pop_front();
+    // The pixels move to a shared buffer so they are copied out without
+    // holding the lock the audio callback needs.
+    current_px_ = std::make_shared<const std::vector<uint8_t>>(std::move(current_.frame.rgba));
+    current_.frame.rgba.clear();
     has_current_ = true;
     current_generation_ = generation_;
     changed = true;
@@ -1127,24 +1146,30 @@ bool TimelinePlayer::frame(uint64_t* serial, uint8_t* dst, size_t capacity, int*
       ++late_count_;
     }
   }
-  bool copied = false;
+  std::shared_ptr<const std::vector<uint8_t>> px;
+  uint64_t new_serial = 0;
   if (has_current_ && serial && *serial != current_serial_) {
-    const size_t need = current_.frame.rgba.size();
+    px = current_px_;
+    new_serial = current_serial_;
     if (w) *w = current_.frame.width;
     if (h) *h = current_.frame.height;
     if (pts) *pts = current_.pts;
+  }
+  lock.unlock();
+  bool copied = false;
+  if (new_serial) {
+    const size_t need = px ? px->size() : 0;
     if (need == 0) {
       if (w) *w = 0;
       if (h) *h = 0;
-      *serial = current_serial_;
+      *serial = new_serial;
       copied = true;
     } else if (dst && capacity >= need) {
-      std::memcpy(dst, current_.frame.rgba.data(), need);
-      *serial = current_serial_;
+      std::memcpy(dst, px->data(), need);
+      *serial = new_serial;
       copied = true;
     }
   }
-  lock.unlock();
   if (changed) cv_.notify_all();
   if (stop_device && out_) out_->stop();
   return copied;

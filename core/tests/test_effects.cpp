@@ -538,13 +538,24 @@ void test_preview_matches() {
     if (shown.ok) CHECK(diff(shown, render(p, at)) < 0.01);  // the very same picture
   }
   // Playing across the transition: pictures keep coming, no black.
+  auto underruns = [&] {
+    char* j = nullptr;
+    cutlab_timeline_stats(t, &j);
+    const double u = j ? num(j, "audioUnderruns") : -1;
+    cutlab_free(j);
+    return u;
+  };
   cutlab_timeline_seek(t, SEC + SEC / 2, 1);
   cutlab_timeline_play(t);
   int shown = 0, black = 0;
   int64_t last = -1;
   bool forward = true;
-  const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+  double u0 = -1;
+  const auto start = std::chrono::steady_clock::now();
+  const auto end = start + std::chrono::milliseconds(1500);
   while (std::chrono::steady_clock::now() < end) {
+    // Sound gaps after the start-up (the transition runs from 1.75 s to 2.25 s).
+    if (u0 < 0 && std::chrono::steady_clock::now() - start > std::chrono::milliseconds(200)) u0 = underruns();
     int32_t w = 0, h = 0;
     int64_t pts = 0;
     if (cutlab_timeline_frame(t, &serial, buf.data(), static_cast<int64_t>(buf.size()), &w, &h, &pts)) {
@@ -559,7 +570,9 @@ void test_preview_matches() {
   cutlab_timeline_stats(t, &js);
   const std::string st = js ? js : "";
   cutlab_free(js);
-  std::printf("preview across a transition: %d pictures in 1.5 s, stats %s\n", shown, st.c_str());
+  const double gaps = num(st, "audioUnderruns") - u0;
+  std::printf("preview across a transition: %d pictures in 1.5 s, %.0f sound gaps after start-up; stats %s\n", shown, gaps, st.c_str());
+  CHECK(gaps <= (std::getenv("CUTLAB_UNDER_VALGRIND") ? 1000 : 1));
   // (Under valgrind everything runs ~50x slower: only a few pictures.)
   CHECK(shown >= (std::getenv("CUTLAB_UNDER_VALGRIND") ? 3 : 30));
   CHECK(black == 0);
@@ -830,6 +843,78 @@ void test_long_timeline(bool full_export) {
   }
 }
 
+// Export and preview speed with effects on real-size recordings
+// (scripts/make_android_test_media.sh): plain vs a cinematic look on both
+// clips and a dissolve between them, at 1080p60, 1440p60 and 4K30.
+void bench(const std::string& real) {
+  struct Job {
+    const char* file;
+    int w, h;
+    const char* fps;
+    int64_t a_dur, b_in, b_dur, half;  // timeline layout
+  } jobs[] = {
+      {"h264_1080p60.mp4", 1920, 1080, "60", 3 * SEC, 5 * SEC / 2, 5 * SEC / 2, SEC / 2},
+      {"h264_1080p60.mp4", 2560, 1440, "60", 3 * SEC, 5 * SEC / 2, 5 * SEC / 2, SEC / 2},
+      {"hevc10_4k30.mp4", 3840, 2160, "30", SEC, SEC / 2, SEC, SEC / 4},
+  };
+  for (const auto& j : jobs) {
+    const std::string file = real + "/" + j.file;
+    std::ifstream probe_file(file, std::ios::binary);
+    if (!probe_file.good()) {
+      std::printf("bench: %s missing\n", file.c_str());
+      continue;
+    }
+    const std::string canvas = std::to_string(j.w) + " " + std::to_string(j.h);
+    const std::string rate = std::string(j.fps) + " 1";
+    Plan plain(j.w, j.h, rate.c_str());
+    plain.track("v", "video").clip("a", file, 0, j.a_dur, 0).clip("b", file, j.a_dur, j.b_dur, j.b_in);
+    Plan fx = plain;
+    for (const char* c : {"a", "b"}) fx.effect(c, "filter", "look=0,amount=0.8").effect(c, "contrast", "amount=0.15").effect(c, "vignette", "amount=0.35");
+    fx.transition("b", "dissolve", j.half, j.half);
+    const int64_t frames = (j.a_dur + j.b_dur) * std::atoi(j.fps) / SEC;
+    double t_plain = 0, t_fx = 0;
+    Settings s;
+    s.codec = g_codec;
+    s.w = j.w;
+    s.h = j.h;
+    s.fps = j.fps;
+    s.path = out_path("bench_plain.mp4");
+    const std::string st0 = run_export(plain, s, &t_plain);
+    s.path = out_path("bench_fx.mp4");
+    const std::string st1 = run_export(fx, s, &t_fx);
+    const double secs = static_cast<double>(j.a_dur + j.b_dur) / SEC;
+    std::printf("bench export %dx%d@%s (%s, %s): plain %.1f fps (%.2fx real time), with look + dissolve %.1f fps (%.2fx real time)%s\n", j.w, j.h,
+                j.fps, j.file, g_codec.c_str(), frames / t_plain, secs / t_plain, frames / t_fx, secs / t_fx,
+                str(st0, "state") == "done" && str(st1, "state") == "done" ? "" : " [an export failed]");
+    std::remove(out_path("bench_plain.mp4").c_str());
+    std::remove(out_path("bench_fx.mp4").c_str());
+    if (j.w != 1920) continue;
+    // Preview: the timeline player (720p preview) playing the look + dissolve.
+    cutlab_timeline* t = nullptr;
+    if (cutlab_timeline_open(1280, 720, 2, &t) != CUTLAB_OK) continue;
+    cutlab_timeline_set_plan(t, fx.text.c_str());
+    std::vector<uint8_t> buf(1280 * 720 * 4);
+    uint64_t serial = 0;
+    cutlab_timeline_seek(t, 0, 1);
+    cutlab_timeline_play(t);
+    int shown = 0;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(secs * 1000) - 200);
+    while (std::chrono::steady_clock::now() < end) {
+      int32_t w = 0, h = 0;
+      int64_t pts = 0;
+      shown += cutlab_timeline_frame(t, &serial, buf.data(), static_cast<int64_t>(buf.size()), &w, &h, &pts);
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    char* js = nullptr;
+    cutlab_timeline_stats(t, &js);
+    const std::string st = js ? js : "";
+    cutlab_free(js);
+    cutlab_timeline_close(t);
+    std::printf("bench preview 1080p60 look + dissolve at 1280x720: %d pictures in %.1f s (%.0f fps), %d dropped, late avg %.1f ms\n", shown, secs - 0.2,
+                shown / (secs - 0.2), static_cast<int>(num(st, "framesDropped")), num(st, "videoLateAvgMs"));
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -842,10 +927,12 @@ int main(int argc, char** argv) {
   const char* out = std::getenv("CUTLAB_TEST_OUT");
   g_out = out ? out : ".";
   bool long_export = false;
+  std::string bench_dir;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     if (a == "--quick") g_quick = true;
     if (a == "--long") long_export = true;
+    if (a == "--bench" && i + 1 < argc) bench_dir = argv[++i];
   }
   // The best software H.264 encoder in the build, else MPEG-4 Part 2.
   char* js = nullptr;
@@ -863,6 +950,10 @@ int main(int argc, char** argv) {
   cutlab_free(js);
   if (const char* forced = std::getenv("CUTLAB_EXPORT_CODEC")) g_codec = forced;
   std::printf("exports use %s\n", g_codec.c_str());
+  if (!bench_dir.empty()) {
+    bench(bench_dir);
+    return 0;
+  }
 
   if (std::getenv("CUTLAB_FX_ONLY_LONG")) {
     test_long_timeline(long_export);

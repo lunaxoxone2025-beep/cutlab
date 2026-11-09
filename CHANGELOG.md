@@ -1,5 +1,17 @@
 # Changelog
 
+## CUTLAB 0.7 — Phase 7: effects and transitions (2026-11-09)
+
+- 18 effects, each with adjustable parameters and sensible defaults: brightness, contrast, exposure, gamma, highlights, shadows, saturation, vibrance, temperature, tint, RGB gains/offsets, sharpen, blur, vignette, grayscale, black & white, sepia, and a colour filter with 8 cinematic looks. Ten ready-made looks (Cinematic, Vivid, Warm, Cool, Vintage, Noir, Black & white, Sepia, Matte, Game punch).
+- Transitions between adjacent clips: cross dissolve, dip to black, dip to white, wipe and slide (left/right/up/down), zoom in, zoom out, smooth blur; plus video fade in/out. Durations are centred on the cut and limited to the media available beyond it, so no frozen or black frames; the sound cross-fades at a steady level.
+- The preview and the export use the same compositor with the same parameters, from the original media: what the monitor shows is what the file contains.
+- Effects panel: beginner mode (looks, quick sliders, simple transition choices) and advanced mode (full effect stack: add, edit every parameter, switch on/off, reorder, remove, copy to the track; frame-exact fade and transition timing). Desktop: Effects tab; phone: Effects button and sheet.
+- Timeline: transitions drawn across cuts — tap to edit, drag the ends to change the length; fx badges and video fade marks on clips. Undo/redo for every change, slider drags as one step.
+- Settings → Fast effects preview: a 360p preview for heavy effects on slower devices; exports always use full quality.
+- Project format v4 (transition direction, video fades); projects from earlier versions open unchanged.
+- Tests on rendered pictures: every effect and transition, continuity at 24–120 fps, preview = composed picture = exported frame, audio across transitions, a 2-hour timeline and export with effects; integration tests in the real app on Android emulators and Windows.
+- Not in this release: GPU processing of effects (the CPU path is used everywhere), effect keyframes. Hardware encoders from Phase 6 are still not verified on physical devices.
+
 ## CUTLAB 0.6 — Phase 6: video export (2026-11-08)
 
 - Export the whole project to a video file: every clip, sound track, volume, mute/solo, fade and title, rendered from the original files at the export size; gaps black and silent; exact length and frame rate.

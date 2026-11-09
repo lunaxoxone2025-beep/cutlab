@@ -217,12 +217,16 @@ Media Foundation) are part of the device or its drivers.
 Any public release would need a licensing review first. That is out of
 scope for this personal project.
 
+## Outstanding: hardware encoders on real devices
+
+Hardware encoder performance has **not been verified on physical devices**. The CI results above come from software encoders, the Windows runners' Media Foundation encoders (no GPU) and the Android emulators' MediaCodec encoders. Until CUTLAB is tested on the owner's phone and PC, no claim is made about real-phone MediaCodec or real-GPU (NVENC, Quick Sync, AMF) encoding speed, quality, heat or battery use.
+
 ## Limitations (not done yet)
 
 | Item | Status |
 |---|---|
 | Resume after the app is closed | An export that is stopped or killed (app closed, phone restarted) starts again from the beginning. Pause/resume works while the app runs. |
-| Compositing | Only the top-most picture. No picture-in-picture, transparency, transitions, effects, keyframes or colour work yet (later phases). |
+| Compositing | Effects, video fades and transitions are exported since Phase 7 through the same compositor as the preview (`docs/EFFECTS.md`). Still only the top-most picture: no picture-in-picture, blend modes or keyframes. |
 | Clip speed / reverse | Exported at normal speed (as in playback; the editor has no control yet). |
 | Background colour | Gaps and borders are always black; the project's background setting is not used yet. |
 | HDR | HDR/10-bit sources are converted to 8-bit SDR BT.709 without tone mapping (colours may look flat); output is 8-bit. |

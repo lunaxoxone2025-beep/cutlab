@@ -1,6 +1,6 @@
 # The `.cutlab` project format
 
-- **Extension:** `.cutlab` · **Encoding:** UTF-8 JSON · **Current version:** 1
+- **Extension:** `.cutlab` · **Encoding:** UTF-8 JSON · **Current version:** 4 (v1–v3 files open unchanged; see *Version history*)
 - **Reference implementation:** `packages/project_format` (Dart), with tests in `packages/project_format/test/`.
 
 ## Principles
@@ -83,14 +83,20 @@
 | `speed` | rational > 0 | `{1,4}` = 25 % slow motion. Source span = `durationTicks × speed` |
 | `reversed` | bool | Omitted when false |
 | `volume` | number | 1.0 = unity gain |
-| `effects` | `Effect[]` | Ordered stack, applied first → last |
-| `transitionIn` | `{type, durationTicks}`? | Transition from the previous clip on the track; not longer than the clip |
+| `fadeInTicks`, `fadeOutTicks` | int ≥ 0 | Audio fades; omitted when 0 |
+| `videoFadeInTicks`, `videoFadeOutTicks` | int ≥ 0 | Picture fades from / to black (v4); omitted when 0 |
+| `effects` | `Effect[]` | Ordered stack, applied first → last (video and photo clips) |
+| `transitionIn` | `{type, durationTicks, direction?}`? | Transition from the clip that ends exactly where this one starts on the same track (v4: `direction` `left`/`right`/`up`/`down`, default `left`). It plays only when that clip is there; the duration is centred on the cut and limited by the clips (see `docs/EFFECTS.md`) |
 | `keyframes` | `{ "<param>": Keyframe[] }` | e.g. `"transform.scale"`, `"opacity"`, `"volume"`, `"effects.e1.intensity"` |
 | `data` | object | Settings for generated clips (text content, font, style…) |
 
 ### `Effect`
 
 `{ "id": string, "type": string, "enabled": bool, "params": object }`. `params` is free-form so files with effects added in later versions remain loadable; unknown effect types are preserved and skipped at render time.
+
+Types rendered since v4 (parameters, ranges and defaults in `docs/EFFECTS.md`): `brightness`, `contrast`, `exposure`, `gamma`, `highlights`, `shadows`, `saturation`, `vibrance`, `temperature`, `tint`, `rgb`, `sharpen`, `blur`, `vignette`, `grayscale`, `black_white`, `sepia`, `filter`. A missing parameter takes its default; values outside the range are clamped. Disabled effects (`"enabled": false`) are kept but not drawn.
+
+Transition types: `dissolve` (older files may say `crossfade`), `dip_black`, `dip_white`, `wipe`, `slide`, `zoom_in`, `zoom_out`, `blur`.
 
 ### `Keyframe`
 
@@ -103,6 +109,15 @@
 ### `exportSettings`
 
 `{ "container": "mp4"|"mov"|"webm", "videoCodec": "h264"|"hevc"|"av1"|"vp9", "height", "frameRate", "videoBitrateKbps", "audioCodec": "aac"|"opus", "audioBitrateKbps" }`
+
+## Version history
+
+| Version | Change | Migration |
+|---|---|---|
+| 1 | First layout | — |
+| 2 | Image tracks, clip fades, links | none needed |
+| 3 | Track volume and solo, master volume | none needed |
+| 4 | Working effects and transitions: transition `direction`, clip video fades | none needed (existing effect and transition data is kept as it is) |
 
 ## Versioning rules
 

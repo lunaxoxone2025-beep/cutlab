@@ -297,7 +297,8 @@ class TimelinePlayer {
   bool vseek_accurate_ = true;
   bool video_eof_ = false;
   std::deque<QFrame> queue_;
-  QFrame current_;
+  QFrame current_;  // its pixels are in current_px_
+  std::shared_ptr<const std::vector<uint8_t>> current_px_;
   bool has_current_ = false;
   uint64_t current_generation_ = 0;
   uint64_t current_serial_ = 0;

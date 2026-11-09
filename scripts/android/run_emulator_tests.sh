@@ -48,6 +48,7 @@ adb shell mkdir -p $D/out $D/bench-out
 native export CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/out ./cutlab_export_tests
 native effects CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/out ./cutlab_effects_tests
 native effects-bench ./cutlab_bench_effects 5
+native effects-export-bench CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/bench-out ./cutlab_effects_tests --bench $D/real
 native export-bench CUTLAB_TEST_MEDIA=$D/media CUTLAB_TEST_OUT=$D/bench-out ./cutlab_export_tests --bench $D/real
 adb pull $D/out "$LOGS/exports" >/dev/null 2>&1 || true
 adb shell rm -rf $D/bench-out

@@ -170,6 +170,11 @@ jobs:
         run: |
           mkdir -p "$CUTLAB_TEST_OUT"
           build/core/cutlab_export_tests --bench build/android-media 2>/dev/null
+      - name: Effects export and preview benchmark (Linux, 1080p60 / 1440p60 / 4K30)
+        env:
+          CUTLAB_TEST_MEDIA: ${{ github.workspace }}/build/test-media
+          CUTLAB_TEST_OUT: ${{ runner.temp }}/bench-out
+        run: build/core/cutlab_effects_tests --bench build/android-media 2>/dev/null
 
   core-windows:
     name: C++ core + media engine (Windows x64)
