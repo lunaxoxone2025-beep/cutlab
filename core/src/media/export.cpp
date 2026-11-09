@@ -1047,12 +1047,10 @@ void Exporter::run_once(const EncoderInfo& enc_info, Run& run) {
       fill_black(c.get());
       if (composed) {
         const RgbaBuffer& rgba = comp->picture();
-        from_rgba = sws_getCachedContext(from_rgba, W, H, AV_PIX_FMT_RGBA, W, H, AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr);
-        if (!from_rgba) throw MediaError("cannot convert the composed picture");
-        sws_setColorspaceDetails(from_rgba, sws_getCoefficients(SWS_CS_DEFAULT), 1, sws_getCoefficients(SWS_CS_ITU709), 0, 0, 1 << 16, 1 << 16);
         const uint8_t* src[4] = {rgba.px.data(), nullptr, nullptr, nullptr};
         const int sls[4] = {W * 4, 0, 0, 0};
-        sws_scale(from_rgba, src, sls, 0, H, c->data, c->linesize);
+        convert_parallel(AV_PIX_FMT_RGBA, src, sls, AV_PIX_FMT_YUV420P, c->data, c->linesize, W, H, SWS_CS_DEFAULT, 1, SWS_CS_ITU709, 0,
+                         SWS_BILINEAR);
       } else if (pic && pic->native) {
         const AVFrame* f = pic->native.get();
         // Fit inside the frame (letterbox), even sizes and positions.

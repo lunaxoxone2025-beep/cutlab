@@ -273,12 +273,17 @@ void main() {
     await wait(300);
     await tester.tap(find.byKey(const Key('tlEffects')));
     await wait(500);
+    await tester.ensureVisible(find.byKey(const Key('look-noir')));
+    await wait(300);
     await tester.tap(find.byKey(const Key('look-noir')));
     await wait(300);
     final scrollable = find.descendant(of: find.byKey(const Key('fxPanel')), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const Key('trType-dip_black')), 150, scrollable: scrollable);
+    await tester.ensureVisible(find.byKey(const Key('trType-dip_black')));
+    await wait(400);
     await tester.tap(find.byKey(const Key('trType-dip_black')));
     await wait(1500); // the preview renders it meanwhile
+    expect(find.byKey(const Key('trSpan')), findsOneWidget, reason: 'the dip is set and plays');
     expect(tester.takeException(), isNull);
     await tester.pageBack();
     await wait(1000);

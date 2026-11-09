@@ -198,6 +198,43 @@ void fill_black(Rgba img) {
 
 }  // namespace
 
+void convert_parallel(AVPixelFormat sf, const uint8_t* const src[4], const int sls[4], AVPixelFormat df, uint8_t* const dst[4],
+                      const int dls[4], int w, int h, int src_cs, int src_full, int dst_cs, int dst_full, int flags) {
+  const AVPixFmtDescriptor* sd = av_pix_fmt_desc_get(sf);
+  const AVPixFmtDescriptor* dd = av_pix_fmt_desc_get(df);
+  if (!sd || !dd) throw MediaError("unknown pixel format");
+  const int sh = sd->log2_chroma_h, dh = dd->log2_chroma_h;
+  const int align = 1 << std::max(1, std::max(sh, dh));
+  const int bands = std::min(static_cast<int>(WorkPool::shared().threads()) * 2, h / 64);
+  const int band = bands > 1 ? ((h + bands - 1) / bands + align - 1) / align * align : h;
+  const int n = (h + band - 1) / band;
+  WorkPool::shared().parallel(n < 8 && n > 1 ? 8 : n, [&](int b, int e) {
+    // One context per band height and thread (bands are the same height but the last).
+    struct Contexts {
+      std::map<int, SwsContext*> by_height;
+      ~Contexts() {
+        for (auto& [k, c] : by_height) sws_freeContext(c);
+      }
+    };
+    thread_local Contexts ctx;
+    for (int i = b; i < e && i < n; ++i) {
+      const int y0 = i * band, bh = std::min(h, y0 + band) - y0;
+      if (bh <= 0) continue;
+      SwsContext*& c = ctx.by_height[bh];
+      c = sws_getCachedContext(c, w, bh, sf, w, bh, df, flags, nullptr, nullptr, nullptr);
+      if (!c) continue;
+      sws_setColorspaceDetails(c, sws_getCoefficients(src_cs), src_full, sws_getCoefficients(dst_cs), dst_full, 0, 1 << 16, 1 << 16);
+      const uint8_t* sp[4] = {nullptr, nullptr, nullptr, nullptr};
+      uint8_t* dp[4] = {nullptr, nullptr, nullptr, nullptr};
+      for (int q = 0; q < 4; ++q) {
+        if (src[q]) sp[q] = src[q] + static_cast<ptrdiff_t>(y0 >> ((q == 1 || q == 2) ? sh : 0)) * sls[q];
+        if (dst[q]) dp[q] = dst[q] + static_cast<ptrdiff_t>(y0 >> ((q == 1 || q == 2) ? dh : 0)) * dls[q];
+      }
+      sws_scale(c, sp, sls, 0, bh, dp, dls);
+    }
+  });
+}
+
 Compositor::Compositor(int width, int height, DecodeOptions opts) : w_(width), h_(height), pool_([&] {
   opts.native = true;
   opts.max_width = 0;
@@ -230,7 +267,13 @@ void Compositor::draw_frame(const VideoFrame& vf, Rgba dst, int slot) {
   if (!sws) throw MediaError("cannot convert the picture");
   sws_setColorspaceDetails(sws, sws_getCoefficients(sws_coeffs(f)), f->color_range == AVCOL_RANGE_JPEG ? 1 : 0, sws_getCoefficients(SWS_CS_DEFAULT), 1, 0,
                            1 << 16, 1 << 16);
-  if (vf.rotation == 0) {
+  if (vf.rotation == 0 && same) {
+    // Same size (the export, or a preview at the source size): in bands.
+    uint8_t* d[4] = {dst.row(y0) + static_cast<size_t>(x0) * 4, nullptr, nullptr, nullptr};
+    int ls[4] = {dst.stride, 0, 0, 0};
+    convert_parallel(static_cast<AVPixelFormat>(f->format), f->data, f->linesize, AV_PIX_FMT_RGBA, d, ls, f->width, f->height, sws_coeffs(f),
+                     f->color_range == AVCOL_RANGE_JPEG ? 1 : 0, SWS_CS_DEFAULT, 1, SWS_POINT);
+  } else if (vf.rotation == 0) {
     uint8_t* d[4] = {dst.row(y0) + static_cast<size_t>(x0) * 4, nullptr, nullptr, nullptr};
     int ls[4] = {dst.stride, 0, 0, 0};
     sws_scale(sws, f->data, f->linesize, 0, f->height, d, ls);

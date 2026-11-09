@@ -524,25 +524,47 @@ void run_cube(const Cube& c, Rgba img, int x0, int y0, int w, int h) {
 }
 
 void run_vignette(const Step& s, Rgba img, int x0, int y0, int w, int h) {
-  const float cx = w * 0.5f, cy = h * 0.5f;
-  std::vector<float> nx2(static_cast<size_t>(w));
-  for (int x = 0; x < w; ++x) {
-    const float nx = (x + 0.5f - cx) / cx;
-    nx2[x] = nx * nx;
+  // The darkening per pixel depends only on the size and the settings:
+  // computed once, then each frame is a multiply (per calling thread).
+  struct Map {
+    int w = 0, h = 0;
+    float a = -1, b = -1, c = -1;
+    std::vector<uint16_t> k;  // x256 per pixel
+    std::vector<int> first;   // first darkened column per row (w = none)
+  };
+  thread_local Map cache;
+  Map& m = cache;  // (the workers below use this thread's map)
+  if (m.w != w || m.h != h || m.a != s.a || m.b != s.b || m.c != s.c) {
+    m.w = w;
+    m.h = h;
+    m.a = s.a;
+    m.b = s.b;
+    m.c = s.c;
+    m.k.assign(static_cast<size_t>(w) * h, 256);
+    m.first.assign(static_cast<size_t>(h), w);
+    const float cx = w * 0.5f, cy = h * 0.5f;
+    for (int y = 0; y < h; ++y) {
+      const float ny = (y + 0.5f - cy) / cy, ny2 = ny * ny;
+      for (int x = 0; x < w; ++x) {
+        const float nx = (x + 0.5f - cx) / cx;
+        const float d = std::sqrt(nx * nx + ny2);
+        if (d <= s.b) continue;
+        m.k[static_cast<size_t>(y) * w + x] = static_cast<uint16_t>((1 - s.a * smooth(s.b, s.b + s.c, d)) * 256 + 0.5f);
+        m.first[y] = std::min(m.first[y], x);
+      }
+    }
   }
   WorkPool::shared().parallel(h, [&](int b, int e) {
     for (int y = b; y < e; ++y) {
+      if (m.first[y] >= w) continue;  // inside the clear centre
       uint8_t* p = img.row(y0 + y) + x0 * 4;
-      const float ny = (y + 0.5f - cy) / cy, ny2 = ny * ny;
-      // Rows wholly inside the clear centre need nothing.
-      if (std::sqrt(ny2) < s.b && std::sqrt(nx2[0] + ny2) < s.b) continue;
+      const uint16_t* k = m.k.data() + static_cast<size_t>(y) * w;
       for (int x = 0; x < w; ++x, p += 4) {
-        const float d = std::sqrt(nx2[x] + ny2);
-        if (d <= s.b) continue;
-        const int k = static_cast<int>((1 - s.a * smooth(s.b, s.b + s.c, d)) * 256 + 0.5f);
-        p[0] = static_cast<uint8_t>((p[0] * k + 128) >> 8);
-        p[1] = static_cast<uint8_t>((p[1] * k + 128) >> 8);
-        p[2] = static_cast<uint8_t>((p[2] * k + 128) >> 8);
+        const int f = k[x];
+        if (f == 256) continue;
+        p[0] = static_cast<uint8_t>((p[0] * f + 128) >> 8);
+        p[1] = static_cast<uint8_t>((p[1] * f + 128) >> 8);
+        p[2] = static_cast<uint8_t>((p[2] * f + 128) >> 8);
       }
     }
   });

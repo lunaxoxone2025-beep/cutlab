@@ -48,6 +48,12 @@ double video_fade_level(const TlClip& c, Ticks t);
 /// even sizes and positions so YUV 4:2:0 output lines up).
 void fit_rect(int pw, int ph, int W, int H, int* x, int* y, int* w, int* h);
 
+/// A same-size pixel format conversion (sws_scale is single-threaded),
+/// split into bands of rows over the worker pool. Colour spaces as for
+/// sws_setColorspaceDetails (coefficient table ids, full-range flags).
+void convert_parallel(AVPixelFormat sf, const uint8_t* const src[4], const int sls[4], AVPixelFormat df, uint8_t* const dst[4],
+                      const int dls[4], int w, int h, int src_cs, int src_full, int dst_cs, int dst_full, int flags);
+
 /// Decoded pictures of the clips in use (one decoder per clip, kept while
 /// the clip is near the requested times, reused across transitions).
 class FramePool {
